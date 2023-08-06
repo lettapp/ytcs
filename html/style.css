@@ -1,0 +1,559 @@
+html {
+	--cs-background:#222;
+	--cs-header-background:#292929;
+	--cs-placeholder-color:rgba(255,255,255,.1);
+	--cs-text-color:#d6d6d6;
+	--cs-link-color:#609fff;
+	--cs-meta-color:#888;
+	--cs-comment-chain-color:#333;
+	--cs-img-background:#2f2f2f;
+	--cs-owner-badge-color:#717171;
+	--cs-border-color:#666;
+	--cs-donate-amount-border-color:#666;
+	--cs-cc-badge-background:#333;
+	--cs-cc-badge-color:#fff;
+	--cs-cc-badge-border-color:orange;
+	--cs-cc-badge-color-disabled:#777;
+	--cs-code-snippet-background:#999;
+	--cs-code-snippet-color:#000;
+	--cs-info-view-text-color:#aaa;
+	--cs-input-border-color:#666;
+	--cs-input-progress-color-error:#aaa;
+	--cs-theme-color:#c7c7c7;
+	--cs-button-color:#222;
+	--cs-grayscale:grayscale(.6);
+	--cs-paypal-color:#3b7bbF;
+	--cs-paypal-color-success:#4CAF50;
+}
+html:not([dark]):not([fullscreen]) {
+	--cs-background:#f8f8f8;
+	--cs-header-background:#dadada;
+	--cs-border-color:#cecece;
+	--cs-placeholder-color:rgba(0,0,0,.29);
+	--cs-text-color:#111;
+	--cs-link-color:#065fd4;
+	--cs-meta-color:#888;
+	--cs-comment-chain-color:#ddd;
+	--cs-img-background:#eee;
+	--cs-owner-badge-color:#9f9f9f;
+	--cs-donate-amount-border-color:#aaa;
+	--cs-cc-badge-background:#ccc;
+	--cs-cc-badge-color:#222;
+	--cs-cc-badge-border-color:darkcyan;
+	--cs-cc-badge-color-disabled:#555;
+	--cs-code-snippet-background:#e5e5e5;
+	--cs-info-view-text-color:#222;
+	--cs-input-border-color:#ccc;
+	--cs-input-progress-color-error:crimson;
+	--cs-theme-color:#3b7bbF;
+	--cs-button-color:#fff;
+	--cs-theme-color-disabled:#888;
+	--cs-grayscale:none;
+}
+[hidden] {
+	display:none !important;
+}
+cs-app {
+	display:block;
+	background:var(--cs-background);
+	color:var(--cs-text-color);
+	position:fixed;
+	z-index:9999999999;
+	bottom:0;
+	transform:translateZ(0);
+	box-shadow:0 16px 24px 2px rgba(0, 0, 0, 0.14), 0 6px 30px 5px rgba(0, 0, 0, 0.12), 0 8px 10px -5px rgba(0, 0, 0, 0.4);
+	font-size:14px;
+	line-height:20px;
+	cursor:default;
+	user-select:none;
+	font-family:Roboto,arial,sans-serif;
+	-webkit-font-smoothing:antialiased;
+}
+cs-app * {
+	position:relative;
+	box-sizing:border-box;
+	margin:0;
+	padding:0;
+	outline:none !important;
+	border:none;
+	font-weight:normal;
+	overflow:hidden;
+}
+cs-app a {
+	color:inherit;
+	text-decoration:none;
+	cursor:pointer;
+}
+cs-app a:not([href]) {
+	user-select:none;
+}
+cs-app li {
+	list-style:none;
+}
+cs-app input:focus::placeholder {
+	opacity:0;
+}
+cs-app input:not(:focus)::placeholder {
+	opacity:1;
+	transition:opacity 250ms ease-in;
+}
+cs-app input,
+cs-app img {
+	width:100%;
+}
+cs-app svg {
+	display:block;
+	fill:currentColor;
+	stroke:currentColor;
+	stroke-width:0;
+}
+cs-app *[state=disabled] {
+	pointer-events:none;
+}
+.CSOverscroll::after {
+	content:"";
+	display:block;
+	width:100%;
+	height:60%;
+}
+.CSSelectable {
+	user-select:text;
+}
+.CSView {
+	background:var(--cs-background);
+	position:absolute;
+	width:100%;
+	height:100%;
+}
+.CSFlexView {
+	display:flex;
+	flex-flow:column;
+}
+.CSScrollView {
+	overflow-y:scroll;
+}
+.CSScrollView::-webkit-scrollbar {
+	display:none !important;
+}
+.CSOnmove {
+	pointer-events:none;
+	user-select:none;
+}
+.CSInput {
+	color:inherit;
+	background:none;
+}
+.CSUnderline {
+	text-decoration:underline;
+}
+.CSUnderlineHover:hover {
+	text-decoration:underline;
+}
+.CSFlex {
+	display:flex;
+}
+.CSFlexCenter {
+	display:flex;
+	flex-flow:column;
+	align-items:center;
+	text-align:center;
+	height:100%;
+}
+.CSCenterY {
+	display:flex;
+	align-items:center;
+}
+.CSGrow {
+	flex-grow:1;
+}
+.CSNoShrink {
+	flex-shrink:0;
+}
+.CSStickBottom {
+	margin-top:auto;
+}
+.CSResizeBar {
+	position:absolute;
+	z-index:1;
+}
+.CSDragBar {
+	top:0;
+	height:20px;
+	width:100%;
+	cursor:move;
+}
+.CSResizeTop {
+	top:-4px;
+	height:8px;
+	width:100%;
+	cursor:ns-resize;
+	z-index:2;
+}
+.CSResizeSide {
+	width:10px;
+	height:100%;
+	cursor:ew-resize;
+}
+.CSResizeSide[resize=w] {
+	left:-4px;
+}
+.CSResizeSide[resize=e] {
+	right:-4px;
+}
+.CSResizeBoth {
+	top:-6px;
+	width:16px;
+	height:16px;
+	z-index:3;
+}
+.CSResizeBoth[resize=nw] {
+	left:-6px;
+	cursor:nwse-resize;
+}
+.CSResizeBoth[resize=ne] {
+	right:-6px;
+	cursor:nesw-resize;
+}
+.CSNavButton {
+	opacity:.5;
+}
+.CSNavButton:hover {
+	opacity:.7;
+}
+.CSAppCloseButton {
+	position:absolute;
+	top:12px;
+	right:11px;
+	width:32px;
+	height:32px;
+	padding:5px;
+	z-index:99;
+}
+.CSBackButton {
+	position:absolute;
+	width:24px;
+	height:24px;
+	top:16px;
+	left:15px;
+}
+.CSBackButton[state=hidden] {
+	visibility:hidden;
+}
+.CSSearchHeader {
+	display:flex;
+	align-items:center;
+	background-color:var(--cs-header-background);
+	padding-left:20px;
+	padding-right:46px;
+	height:56px;
+}
+.CSSearchHeader input {
+	flex:1;
+	height:40px;
+	font-size:16px;
+}
+.CSSearchHeader input::placeholder {
+	color:var(--cs-placeholder-color);
+	font-size:15px;
+}
+.CSCommentCount {
+	background-color:var(--cs-cc-badge-background);
+	border-bottom:2px solid var(--cs-cc-badge-border-color);
+	border-radius:4px 4px 0 0;
+	color:var(--cs-cc-badge-color);
+	padding:2px 5px 0;
+	min-width:32px;
+	font-size:12px;
+	text-align:center;
+	opacity:.7;
+	transition:border-color 200ms, color 200ms;
+}
+.CSCommentCount:hover {
+	opacity:1;
+}
+.CSCommentCount[state=disabled] {
+	color:var(--cs-cc-badge-color-disabled);
+	border-color:transparent;
+	border-radius:4px;
+	opacity:1;
+}
+.CSThread {
+	margin-top:16px;
+	padding-left:20px;
+	padding-right:40px;
+}
+.CSComment {
+	display:flex;
+	padding-bottom:20px;
+	user-select:text;
+}
+.CSComment:not(:first-child) {
+	margin-left:56px;
+}
+.CSComment:not(:first-child) .CSUserImage {
+	width:24px;
+	height:24px;
+}
+.CSComment.CSChained:before {
+	background:var(--cs-comment-chain-color);
+	display:block;
+	position:absolute;
+	width:2px;
+	height:100%;
+	left:11px;
+	content:"";
+}
+.CSComment.CSHidden {
+	opacity:.300;
+}
+.CSUserImage {
+	background-color:var(--cs-img-background);
+	background-size:100%;
+	width:40px;
+	height:40px;
+	margin-right:16px;
+	border-radius:50%;
+	flex-shrink:0;
+}
+.CSAuthorName {
+	display:inline-block;
+	color:inherit;
+	font-weight:500;
+	line-height:18px;
+}
+.CSOwnerBadge {
+	fill:var(--cs-owner-badge-color);
+	width:13px;
+	height:13px;
+	margin-top:2px;
+	margin-left:4px;
+}
+.CSCommentMeta {
+	color:var(--cs-meta-color);
+	line-height:18px;
+	margin-left:6px;
+}
+.CSCommentMeta:hover {
+	color:inherit;
+}
+.CSByUploader .CSCommentMeta {
+	display:none;
+}
+.CSCommentText {
+	display:-webkit-box;
+	width:auto;
+	height:auto;
+	word-break:break-word;
+}
+.CSCommentText[dir=rtl] {
+	-webkit-box-orient:vertical;
+	-webkit-box-align:end;
+}
+.CSCommentText[lang=ar] {
+	font-family:sans-serif;
+	font-size:medium;
+}
+.CSCommentText a {
+	color:var(--cs-link-color);
+}
+.CSTrim {
+	-webkit-box-orient:vertical;
+	-webkit-line-clamp:2;
+	word-break:break-word;
+}
+.CSCommentHeader {
+	display:flex;
+	height:20px;
+	margin-bottom:2px;
+	font-size:13px;
+	line-height:normal;
+}
+.CSDialogMessage {
+	padding:20px;
+	text-align:center;
+}
+.CSDialogMessage > * {
+	display:inline;
+}
+.CSDialogMessage a {
+	text-decoration:underline;
+}
+.CSEmbeddedPlayer {
+	background:#000;
+	width:100%;
+	aspect-ratio:16/9;
+	margin-top:12px;
+}
+.CSFeaturesView {
+	color:var(--cs-info-view-text-color);
+}
+.CSContentView {
+	display:flex;
+	flex-flow:column;
+	max-width:500px;
+	width:100%;
+	height:100%;
+	padding:56px 40px 0;
+	margin:auto;
+}
+.CSContentView > * {
+	flex-shrink:0;
+}
+.CSContentView h1 {
+	margin-bottom:12px;
+	text-align:center;
+	font-size:20px;
+}
+.CSContentView p {
+	margin-bottom:12px;
+}
+.CSContentView b {
+	font-weight:bold;
+}
+.CSContentView ul {
+	margin-bottom:25px;
+}
+.CSContentView ul p {
+	margin-bottom:7px;
+}
+.CSContentView ul li {
+	padding-left:20px;
+	margin-bottom:2px;
+}
+.CSContentView code {
+	display:inline;
+	background-color:var(--cs-code-snippet-background);
+	color:var(--cs-code-snippet-color);
+	border-radius:2px;
+	letter-spacing:1px;
+	padding:1px 6px 2px;
+	margin:0 3px;
+	line-height:normal;
+	font-size:smaller;
+	font-family:monospace;
+}
+.CSViewArtwork {
+	width:325px;
+	margin:10px 0;
+	filter:var(--cs-grayscale);
+}
+.CSFooterLink {
+	display:block;
+	color:var(--cs-link-color);
+	margin-bottom:30px;
+	font-size:small;
+}
+.CSFooterLink:hover {
+	text-decoration:underline;
+}
+.CSApiKeyInputComponent {
+	width:100%;
+	margin-top:15px;
+	text-align:center;
+}
+.CSApiKeyInput input {
+	border-bottom:1px solid;
+	padding-bottom:4px;
+	font-size:15px;
+	text-align:center;
+	border-color:var(--cs-input-border-color);
+}
+.CSApiKeyInputLog {
+	height:20px;
+	padding-top:2px;
+	font-size:small;
+	color:var(--cs-input-progress-color-error);
+}
+.CSProgressBar {
+	position:absolute;
+	bottom:0;
+	height:1px;
+	width:100%;
+	background-color:none;
+}
+.CSProgressBar[state=loading],
+.CSProgressBar[state=waiting] {
+	height:2px;
+	background-color:var(--cs-theme-color);
+}
+.CSProgressBar[state=loading] {
+	animation:progressActive 1s ease infinite;
+}
+.CSProgressBar[state=waiting] {
+	width:33%;
+	animation:progressWaiting 2s linear infinite;
+}
+.CSProgressBar[state=error] {
+	background-color:var(--cs-input-progress-color-error);
+}
+.CSAppProgressBar {
+	top:0;
+	height:2px !important;
+}
+.CSAppProgressBar[state=error] {
+	background-color:crimson;
+}
+@keyframes progressActive {
+	0%		{ left:0%; width:0% }
+	25%		{ left:0%; width:33% }
+	75%		{ left:33%; width:60% }
+	100%	{ left:100%; width:50% }
+}
+@keyframes progressWaiting {
+	0%		{ left:-33% }
+	100%	{ left:100% }
+}
+@keyframes wiggle {
+	10%, 90% {
+		transform:translate3d(-1px, 0, 0);
+	}
+	20%, 80% {
+		transform:translate3d(4px, 0, 0);
+	}
+	30%, 50%, 70% {
+		transform:translate3d(-6px, 0, 0);
+	}
+	40%, 60% {
+		transform:translate3d(6px, 0, 0);
+	}
+}
+.CSWiggle {
+	animation:wiggle 0.5s;
+}
+.CSButton {
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	height:38px;
+	padding:0 18px;
+	border-radius:3px;
+	border:1px solid;
+	border-color:var(--cs-theme-color);
+	color:var(--cs-theme-color);
+	transition:filter 200ms;
+}
+.CSButton:last-child {
+	border:none;
+	background-color:var(--cs-theme-color);
+	color:var(--cs-button-color);
+}
+.CSButton:hover {
+	filter:brightness(.9);
+}
+.CSButton:active {
+	filter:brightness(.8);
+}
+.CSButton[state=disabled] {
+	background-color:var(--cs-theme-color-disabled);
+}
+.CSButtons {
+	display:flex;
+	justify-content:center;
+	margin:20px auto 25px;
+}
+.CSButtons .CSButton {
+	margin-right:10px;
+}
+.CSButtons .CSButton:last-child {
+	margin-right:0;
+}
