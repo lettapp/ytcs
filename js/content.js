@@ -34,6 +34,11 @@ function assign()
 	return Object.assign(...arguments);
 }
 
+function clone(array)
+{
+	return [...array];
+}
+
 function on(s)
 {
 	return 'on' + s[0].toUpperCase() + s.slice(1);
@@ -225,8 +230,10 @@ class array
 		return x instanceof Array ? x : [x];
 	}
 
-	static move(arr, from, to = Infinity)
+	static move(arr, any, to = Infinity)
 	{
+		const from = Number.isInteger(any) ? any : arr.indexOf(any);
+
 		this.insertAt(
 			arr, to, this.removeAt(arr, from)
 		);
@@ -350,9 +357,15 @@ class object
 		return x;
 	}
 
-	static remap(o, k)
+	static index(o, k)
 	{
-		return this.from(values(o), k);
+		const m = new Map;
+
+		values(o).forEach(
+			v => m.set(v[k], v)
+		);
+
+		return m;
 	}
 
 	static filter(o)
@@ -992,18 +1005,18 @@ class UIResponder
 		this.superview?.handleEvent(event, sender);
 	}
 
-	handleAction(action, sender = this)
+	handleAction(action, sender = this, data)
 	{
 		let nextResponder;
 
 		if (action in this && this != sender)
 		{
-			return this[action](sender);
+			return this[action](sender, data);
 		}
 
 		if (nextResponder = this.parent || this.superview)
 		{
-			return nextResponder.handleAction(action, sender);
+			return nextResponder.handleAction(action, sender, data);
 		}
 	}
 }
@@ -1206,14 +1219,14 @@ class UIView extends UIElement
 			this.addTarget(...init.target);
 		}
 
+		if (init.styles) {
+			this.addClass(init.styles);
+		}
+
 		if (init.attrs) {
 			for (const k in init.attrs) {
 				init.attrs[k] && this.setAttribute(k, init.attrs[k]);
 			}
-		}
-
-		if (init.styles) {
-			this.addClass(init.styles);
 		}
 
 		if (init.text) {
@@ -1284,19 +1297,14 @@ class UIView extends UIElement
 
 	clear()
 	{
-		while (this.subviews.length) {
-			this.removeSubview(this.subviews[0]);
-		}
+		clone(this.subviews).forEach(
+			view => this.removeSubview(view)
+		);
 	}
 
-	hide()
+	hide(bool)
 	{
-		this.hidden = true;
-	}
-
-	show()
-	{
-		this.hidden = false;
+		this.hidden = bool;
 	}
 
 	queryId(id)
@@ -1350,6 +1358,17 @@ class UIView extends UIElement
 
 		e.stopPropagation();
 	}
+
+	destruct()
+	{
+		this.removeFromSuperview();
+
+		clone(this.subviews).forEach(
+			view => view.destruct()
+		);
+
+		this.targets.clear();
+	}
 }
 
 class UIText extends UIView
@@ -1360,13 +1379,45 @@ class UIText extends UIView
 	}
 }
 
+class UIResizeBar extends UIView
+{
+	constructor(p)
+	{
+		super({
+			styles:'CSResizeBar',
+			events:'pointerdown',
+			attrs: {
+				resize:p
+			}
+		});
+	}
+
+	onPointerdown(e)
+	{
+		const p = e.target.getAttribute('resize');
+
+		if (e.which != 1) {
+			return;
+		}
+
+		this.handleAction('resizeBarClicked', this, {
+			startX:e.clientX,
+			startY:e.clientY,
+			isMove:p.includes('we'),
+			resizeL:p.includes('w'),
+			resizeR:p.includes('e'),
+			resizeT:p.includes('n'),
+		});
+	}
+}
+
 class UIWindow extends UIView
 {
 	constructor(width, height)
 	{
 		super({
 			source:'UIWindow',
-			events:'wheel',
+			events:'mouseenter mouseleave',
 			width:width,
 			height:height
 		});
@@ -1388,12 +1439,19 @@ class UIWindow extends UIView
 			minWidth:w + 'px',
 		});
 
-		this.addResizeListeners();
+		string.split('w e n ne nw we').forEach(
+			p => this.addSubview(new UIResizeBar(p))
+		);
 	}
 
-	onWheel(e)
+	onMouseenter()
 	{
-		dom.preventScroll(e);
+		dom.preventScroll(1);
+	}
+
+	onMouseleave()
+	{
+		dom.preventScroll(0);
 	}
 
 	setPosition(props)
@@ -1404,35 +1462,28 @@ class UIWindow extends UIView
 		}
 	}
 
-	addResizeListeners()
+	resizeBarClicked(sender, data)
 	{
-		this.querySelectorAll('[resize], [movable]').forEach(bar =>
-		{
-			const action = bar.attributes.resize ? 'resize' : 'move';
+		if (data.isMove) {
+			return this.onMoveStart(data.startX);
+		}
 
-			bar.addEventListener('pointerdown',
-				e => (e.which == 1) && this[action](e)
-			);
-		});
+		this.onResizeStart(data);
 	}
 
-	resize(e)
+	onResizeStart(data)
 	{
-		const	towards = e.target.getAttribute('resize'),
-				resizeL	= towards.includes('w'),
-				resizeR	= towards.includes('e'),
-				resizeT	= towards.includes('n');
+		const {startX, startY, resizeR, resizeL, resizeT} = data;
 
-		const	rect = this.rect,
-				minWidth = this.minWidth,
-				minHeight = this.minHeight,
-				winRightX = window.innerWidth,
-				maxTop = window.innerHeight - minHeight,
-				startX = e.clientX,
-				startY = e.clientY,
-				startL = rect.x,
-				startT = rect.y,
-				startW = rect.width;
+		const
+			rect = this.rect,
+			minWidth = this.minWidth,
+			minHeight = this.minHeight,
+			winRightX = window.innerWidth,
+			maxTop = window.innerHeight - minHeight,
+			startL = rect.x,
+			startT = rect.y,
+			startW = rect.width;
 
 		let deltaX = 0,
 			deltaY = 0,
@@ -1480,9 +1531,9 @@ class UIWindow extends UIView
 		});
 	}
 
-	move(e)
+	onMoveStart(startX)
 	{
-		const [startX, startL] = [e.clientX, this.rect.left];
+		const startL =  this.rect.left;
 
 		this.onManipulation(
 			e => this.style.left = startL + (e.clientX - startX) + 'px'
@@ -1519,24 +1570,20 @@ class UIScrollView extends UIView
 	constructor(init)
 	{
 		UI.extend(init, {
-			styles:'CSView CSScrollView',
+			styles:'CSScrollView',
 			import:'scrollTop scrollHeight offsetHeight',
-			events:'wheel',
+			events:'scroll',
 		});
 
 		super(init);
 	}
 
-	onWheel(e)
+	onScroll(e)
 	{
-		dom.preventScroll(e);
-
-		if (this.isScrollable) {
-			this.didScroll(this.scrollTop += e.deltaY);
-		}
+		this.didScroll();
 	}
 
-	didScroll(scrollTop)
+	didScroll()
 	{
 	}
 
@@ -1637,6 +1684,7 @@ class UIInput extends UIView
 	constructor(init)
 	{
 		UI.extend(init, {
+			source:'UIInput',
 			import:'placeholder focus select',
 			events:'focus keydown input',
 			attrs: {
@@ -1647,9 +1695,14 @@ class UIInput extends UIView
 		super(init);
 	}
 
-	onFocus(e)
+	get value()
 	{
-		this.sendAction('onFocus');
+		return this.element.value.trim();
+	}
+
+	set value(s)
+	{
+		this.element.value = s;
 	}
 
 	onKeydown(e)
@@ -1671,28 +1724,6 @@ class UIInput extends UIView
 	}
 }
 
-class UITextInput extends UIInput
-{
-	constructor(init)
-	{
-		UI.extend(init, {
-			source:'UITextInput'
-		});
-
-		super(init);
-	}
-
-	get value()
-	{
-		return this.element.value.trim();
-	}
-
-	set value(s)
-	{
-		this.element.value = s;
-	}
-}
-
 class UIProgressInput extends UIView
 {
 	constructor(init)
@@ -1708,15 +1739,18 @@ class UIProgressInput extends UIView
 	{
 		this.valueTester = init.valueTester;
 
-		this.messageText = this.queryId('messageText');
-
-		this.input = new UITextInput({
+		this.input = new UIInput({
 			placeholder:init.placeholder,
 			superview:[this, 'textInput']
 		});
 
 		this.progressBar = new UIProgressBar({
 			superview:[this, 'textInput']
+		});
+
+		this.messageText = new UIView({
+			styles:'CSApiKeyInputLog',
+			superview:[this]
 		});
 
 		this.setState('normal');
@@ -1987,7 +2021,7 @@ class ViewController extends UIResponder
 
 	destruct()
 	{
-		this.view.remove();
+		this.view.destruct();
 
 		for (const child of this.children) {
 			child.destruct();
@@ -2035,7 +2069,7 @@ class NavViewController extends ViewController
 
 	removeChild()
 	{
-		let visibleNext = this.nextChild,
+		let visibleNext = this.prevChild,
 			visibleThis = this.isVisible && visibleNext;
 
 		if (visibleThis) {
@@ -2056,7 +2090,7 @@ class NavViewController extends ViewController
 		return this.children.at(-1);
 	}
 
-	get nextChild()
+	get prevChild()
 	{
 		return this.children.at(-2);
 	}
@@ -2138,13 +2172,15 @@ class AppController extends NavViewController
 
 	onAuthRequired()
 	{
-		this.addChild(new AuthView);
+		this.addChild(
+			new AuthView(this.trialMode = false)
+		);
 	}
 
 	showSearchView(trialMode)
 	{
 		this.addChild(
-			new SearchView(this.inTrialMode = trialMode)
+			new SearchView(this.trialMode = trialMode)
 		);
 	}
 
@@ -2161,7 +2197,7 @@ class AppController extends NavViewController
 
 		this.viewWillAppear(sender);
 
-		this.view.show();
+		this.view.hide(0);
 
 		this.viewDidAppear(sender);
 	}
@@ -2174,11 +2210,11 @@ class AppController extends NavViewController
 
 		this.viewWillDisappear();
 
-		this.view.hide();
+		this.view.hide(1);
 
 		this.viewDidDisappear();
 
-		if (this.inTrialMode) {
+		if (this.trialMode) {
 			this.onAuthRequired();
 		}
 	}
@@ -2337,14 +2373,14 @@ class SearchView extends ViewController
 			new UIView({source:'UISearchView'})
 		);
 
-		this.userDidAuth = !trialMode;
+		this.didAuth = !trialMode;
 
 		notifications.addListener(this, 'actionKeyPress');
 	}
 
 	viewDidSet(view)
 	{
-		this.input = new UITextInput({
+		this.input = new UIInput({
 			placeholder:'type keywords here..',
 			target:[this, 'onFocus:auditContext onPaste:onSubmit onEnter:onSubmit'],
 			superview:[view, 'header']
@@ -2359,7 +2395,8 @@ class SearchView extends ViewController
 		});
 
 		this.contentView = new UIView({
-			source:view.queryId('content')
+			styles:'CSSearchBody CSViewStack',
+			superview:[view]
 		});
 
 		this.contentView.addSubviews([
@@ -2373,7 +2410,7 @@ class SearchView extends ViewController
 	viewWillAppear()
 	{
 		interval.setImmediate(
-			_ => this.auditContext(), this.userDidAuth ? 250 : 2e8
+			_ => this.auditContext(), this.didAuth ? 250 : 2e8
 		);
 	}
 
@@ -2602,7 +2639,7 @@ class UISearchMessageView extends UIView
 	constructor()
 	{
 		super({
-			styles:'CSView CSDialogMessage'
+			styles:'CSDialogMessage'
 		});
 
 		this.messages = {
@@ -2859,7 +2896,7 @@ class UIComment extends UIView
 			}
 
 			if (comment.hidden) {
-				this.hide();
+				this.hide(1);
 			}
 		}
 
@@ -3003,19 +3040,9 @@ class UIDocument extends UIElement
 		);
 	}
 
-	get isFullscreen()
+	preventScroll(bool)
 	{
-		return !!document.fullscreenElement;
-	}
-
-	preventScroll(e)
-	{
-		if (e.ctrlKey) {
-			return;
-		}
-
-		e.preventDefault();
-		e.stopPropagation();
+		this.condClass('CSNoScroll', bool);
 	}
 
 	handleMoveEvent(pointerMoveFn)
@@ -3026,15 +3053,20 @@ class UIDocument extends UIElement
 
 			window.onpointerup = e =>
 			{
-				this.delClass('CSOnmove');
+				this.delClass('CSOnMove');
 
 				resolve(
 					window.onpointermove = onpointerup = null
 				);
 			};
 
-			this.addClass('CSOnmove');
+			this.addClass('CSOnMove');
 		});
+	}
+
+	get isFullscreen()
+	{
+		return !!document.fullscreenElement;
 	}
 
 	setDarkModeState(bool)
@@ -3052,7 +3084,7 @@ class ActionKeyHandler
 {
 	constructor()
 	{
-		window.addEventListener('keydown', this.onKeydown.bind(this), true);
+		addEventListener('keydown', this.onKeydown.bind(this), true);
 	}
 
 	onKeydown(e)
@@ -3116,12 +3148,8 @@ class App extends Main
 
 	onInit()
 	{
-		addEventListener('error',
-			this.onUncaughtError.bind(this)
-		);
-
-		addEventListener('unhandledrejection',
-			this.onUncaughtError.bind(this)
+		string.split('error unhandledrejection').forEach(
+			event => addEventListener(event, this.onUncaughtError.bind(this))
 		);
 
 		new ActionKeyHandler;

@@ -2,31 +2,22 @@
 	<div protoid="UIView"></div>
 	<a protoid="UIAnchor" target="_blank"></a>
 	<img protoid="UIImage" src="">
-	<cs-app protoid="UIWindow" hidden>
-		<div class="CSResizeBar CSDragBar" movable="we"></div>
-		<div class="CSResizeBar CSResizeTop" resize="n"></div>
-		<div class="CSResizeBar CSResizeSide" resize="w"></div>
-		<div class="CSResizeBar CSResizeSide" resize="e"></div>
-		<div class="CSResizeBar CSResizeBoth" resize="nw"></div>
-		<div class="CSResizeBar CSResizeBoth" resize="ne"></div>
-		<div class="CSView" id="views"></div>
+	<cs-app protoid="UIWindow" id="CSApp" hidden>
+		<div class="CSViewStack" id="views"></div>
 	</cs-app>
-	<div protoid="UINavView" class="CSView">
-		<div class="CSView" id="views"></div>
+	<div protoid="UINavView">
+		<div class="CSViewStack" id="views"></div>
 	</div>
+	<input protoid="UIInput" class="CSInput" spellcheck="false" autocomplete="off">
 	<div protoid="UIProgressInput">
 		<div class="CSApiKeyInput" id="textInput">
 		</div>
-		<div class="CSApiKeyInputLog" id="messageText"></div>
 	</div>
-	<input protoid="UITextInput" class="CSInput" spellcheck="false" autocomplete="off">
-	<div protoid="UISearchView" class="CSView CSFlexView">
+	<div protoid="UISearchView">
 		<div class="CSSearchHeader" id="header"></div>
-		<div class="CSGrow" id="content"></div>
 	</div>
 	<div protoid="UIComment" class="CSComment">
-		<a class="CSUserImage" href="{channelUrl}" target="_blank" id="userImage">
-		</a>
+		<a class="CSUserImage" href="{channelUrl}" target="_blank" id="userImage"></a>
 		<div class="CSGrow" id="main">
 			<div class="CSCommentHeader" id="meta">
 				<a class="CSAuthorName" href="{channelUrl}" target="_blank">{displayName}</a>
@@ -35,53 +26,45 @@
 		</div>
 	</div>
 	<iframe protoid="UIEmbeddedPlayer" class="CSEmbeddedPlayer" allowfullscreen></iframe>
-	<div protoid="UIFeaturesView" class="CSView">
-		<div class="CSContentView CSFeaturesView">
-			<h1>Hooray!</h1>
-			<p>When comments count is turned on you can search using special keywords.</p>
-			<ul>
-				<li>Use <code>:</code> to show comments with timestamps (0:37)
-				<li>Use <code>:all</code> to show all comments.
-				<li>Use <code>:link</code> to show comments with links.
-				<li>Use <code>:reply</code> to show comments with replies.
-				<li>Use <code>:creator</code> to show comments by the uploader.
-				<li>Use <code>0:00-0:19</code> to search within specific time frame.
-			</ul>
-			<p>In addition, the features below are always available.
-			<ul>
-				<li>Use <code>global:</code> to search all channel comments. For example <code>global: abc</code> will search for "abc" on all channel videos.
-			</ul>
-		</div>
+	<div protoid="UIFeaturesView" class="CSContentView CSFeaturesView">
+		<h1>Hooray!</h1>
+		<p>When comments count is turned on you can search using special keywords.</p>
+		<ul>
+			<li>Use <code>:</code> to show comments with timestamps (0:37)
+			<li>Use <code>:all</code> to show all comments.
+			<li>Use <code>:link</code> to show comments with links.
+			<li>Use <code>:reply</code> to show comments with replies.
+			<li>Use <code>:creator</code> to show comments by the uploader.
+			<li>Use <code>0:00-0:19</code> to search within specific time frame.
+		</ul>
+		<p>In addition, the features below are always available.
+		<ul>
+			<li>Use <code>global:</code> to search all channel comments. For example <code>global: abc</code> will search for "abc" on all channel videos.
+		</ul>
 	</div>
-	<div protoid="UIAuthView" class="CSView">
-		<div class="CSContentView CSFlexCenter">
-			<h1>Welcome!</h1>
-			<p class="CSSelectable">Please insert your Youtube Data API key</p>
-			<div class="CSApiKeyInputComponent" id="keyInput">
-			</div>
-			<div class="CSViewArtwork" id="artwork">
-			</div>
-			<div class="CSStickBottom" id="footer"></div>
+	<div protoid="UIAuthView" class="CSContentView CSFlexCenter">
+		<h1>Welcome!</h1>
+		<p class="CSSelectable">Please insert your Youtube Data API key</p>
+		<div class="CSApiKeyInputComponent" id="keyInput">
 		</div>
+		<div class="CSViewArtwork" id="artwork">
+		</div>
+		<div class="CSStickBottom" id="footer"></div>
 	</div>
-	<div protoid="UIHelpView" class="CSView">
-		<div class="CSContentView">
-			<h1>Youtube API Key</h1>
-			<p>Youtube API key is needed for any software that wants to access youtube data like comments and videos.</p>
-			<p>Some apps and services use their own key for this purpose, but that may have disadvantages for the user in terms of privacy and reliability.</p>
-			<p>Generating your own key is free and ensures your activity stays private and not limited.</p>
-			<div class="CSStickBottom">
-				<div class="CSButtons" id="actionBtns">
-				</div>
+	<div protoid="UIHelpView" class="CSContentView">
+		<h1>Youtube API Key</h1>
+		<p>Youtube API key is needed for any software that wants to access youtube data like comments and videos.</p>
+		<p>Some apps and services use their own key for this purpose, but that may have disadvantages for the user in terms of privacy and reliability.</p>
+		<p>Generating your own key is free and ensures your activity stays private and not limited.</p>
+		<div class="CSStickBottom">
+			<div class="CSButtons" id="actionBtns">
 			</div>
 		</div>
 	</div>
-	<div protoid="UIErrorView" class="CSView">
-		<div class="CSContentView CSFlexCenter">
-			<h1>Hmmm..</h1>
-			<div>We lost connection with the mothership!</div>
-			<div>enable the extension and try again</div>
-		</div>
+	<div protoid="UIErrorView" class="CSContentView CSFlexCenter">
+		<h1>Hmmm..</h1>
+		<div>We lost connection with the mothership!</div>
+		<div>enable the extension and try again</div>
 	</div>
 	<svg protoid="UIIconCross" viewBox="0 0 20 20">
 		<path d="M15.898,4.045c-0.271-0.272-0.713-0.272-0.986,0l-4.71,4.711L5.493,4.045c-0.272-0.272-0.714-0.272-0.986,0s-0.272,0.714,0,0.986l4.709,4.711l-4.71,4.711c-0.272,0.271-0.272,0.713,0,0.986c0.136,0.136,0.314,0.203,0.492,0.203c0.179,0,0.357-0.067,0.493-0.203l4.711-4.711l4.71,4.711c0.137,0.136,0.314,0.203,0.494,0.203c0.178,0,0.355-0.067,0.492-0.203c0.273-0.273,0.273-0.715,0-0.986l-4.711-4.711l4.711-4.711C16.172,4.759,16.172,4.317,15.898,4.045z"></path>

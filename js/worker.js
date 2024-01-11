@@ -34,6 +34,11 @@ function assign()
 	return Object.assign(...arguments);
 }
 
+function clone(array)
+{
+	return [...array];
+}
+
 function on(s)
 {
 	return 'on' + s[0].toUpperCase() + s.slice(1);
@@ -225,8 +230,10 @@ class array
 		return x instanceof Array ? x : [x];
 	}
 
-	static move(arr, from, to = Infinity)
+	static move(arr, any, to = Infinity)
 	{
+		const from = Number.isInteger(any) ? any : arr.indexOf(any);
+
 		this.insertAt(
 			arr, to, this.removeAt(arr, from)
 		);
@@ -350,9 +357,15 @@ class object
 		return x;
 	}
 
-	static remap(o, k)
+	static index(o, k)
 	{
-		return this.from(values(o), k);
+		const m = new Map;
+
+		values(o).forEach(
+			v => m.set(v[k], v)
+		);
+
+		return m;
 	}
 
 	static filter(o)
@@ -1062,7 +1075,6 @@ class BasicComment extends Cloneable
 		const r = APIResource.snippet;
 
 		this.id				= APIResource.id;
-		this.videoId		= r.videoId;
 		this.authorId		= r.authorChannelId.value;
 		this.authorImgUrl	= r.authorProfileImageUrl;
 		this.sourceName		= r.authorDisplayName;
@@ -1074,10 +1086,11 @@ class BasicComment extends Cloneable
 
 class Thread extends Cloneable
 {
-	constructor(topComment)
+	constructor(topComment, videoId)
 	{
 		super();
 
+		this.videoId = videoId;
 		this.id = topComment.id;
 		this.authorId = topComment.authorId;
 
@@ -1092,6 +1105,7 @@ class Thread extends Cloneable
 		this.comments.push(comment);
 
 		assign(comment, {
+			videoId: this.videoId,
 			isOwner: this.authorId == comment.authorId,
 			isReply: this.length > 1,
 		});
@@ -1199,7 +1213,7 @@ class ParsedComment
 			try {
 				url = new URL(url);
 			}
-			catch (e) {
+			catch {
 				return url;
 			}
 
@@ -1580,56 +1594,6 @@ class formatter
 
 		return emojizer.apply(str.output);
 	}
-
-	static formatName(s)
-	{
-		return this.getFormattedName(s) || this.getShortName();
-	}
-
-	static getFormattedName(s)
-	{
-		let tokens = [];
-
-		if (s.length > 28) {
-			return '';
-		}
-
-		if (!/[^A-Za-z0-9\s]/.test(s))
-		{
-			if (string.isUniCase(s)) {
-				s = string.capitalize(s);
-			}
-
-			tokens = string.split(s);
-
-			if (tokens.length == 1) {
-				return string.capitalize(tokens[0], string.PRE_STRCASE);
-			}
-		}
-		else {
-			tokens = string.match(/[A-Za-z0-9]+/g, s);
-		}
-
-		tokens = tokens.map(token =>
-		{
-			if (token.length < 2 || string.isNumeric(token)) {
-				return '';
-			}
-
-			return string.capitalize(token);
-		});
-
-		tokens = tokens.filter(
-			(token, i) => token && i == tokens.indexOf(token)
-		);
-
-		return tokens.join(' ');
-	}
-
-	static getShortName()
-	{
-		return 'user' + math.randint(4);
-	}
 }
 
 class emojizer
@@ -1717,7 +1681,7 @@ class http
 			try {
 				r.data = JSON.parse(r.data);
 			}
-			catch (e) {
+			catch {
 			}
 
 			return r;
@@ -1791,7 +1755,7 @@ class YoutubeCommonApi
 			try {
 				fetch.data = new BasicVideo(fetch.data);
 			}
-			catch (e) {
+			catch {
 				fetch.error = 'errParseError';
 			}
 		}
@@ -1851,13 +1815,11 @@ class YoutubeCommonApi
 			}
 		}
 
-		fetch.data = items;
-
 		if (fetch.ok && !fromCache) {
 			ext.isCached(params.videoId, 1800);
 		}
 
-		return fetch;
+		return assign(fetch, {data:items});
 	}
 
 	videos(params)
@@ -1870,7 +1832,7 @@ class YoutubeCommonApi
 		try {
 			return response.error.errors[0].reason;
 		}
-		catch (e) {
+		catch {
 			return response.error || 'errUnknown';
 		}
 	}
@@ -1882,7 +1844,7 @@ class YoutubeCommonApi
 				item => this.parseThread(item)
 			);
 		}
-		catch (e) {
+		catch {
 			return [];
 		}
 	}
@@ -1897,7 +1859,7 @@ class YoutubeCommonApi
 			}
 
 			thread = new Thread(
-				this.parseComment(snippet.topLevelComment)
+				this.parseComment(snippet.topLevelComment), snippet.videoId
 			);
 
 			if (math.inRange(snippet.totalReplyCount, [1, 5]))
@@ -1909,18 +1871,22 @@ class YoutubeCommonApi
 
 			return thread;
 		}
-		catch (e) {
+		catch {
 		}
 	}
 
 	parseReplies(resource)
 	{
 		try {
-			return array.mapskip(resource.replies.comments.reverse(),
+			const replies = array.mapskip(resource.replies.comments,
 				reply => this.parseComment(reply)
 			);
+
+			return replies.sort(
+				(a, b) => a.publishedAt - b.publishedAt
+			);
 		}
-		catch (e) {
+		catch {
 			return [];
 		}
 	}
@@ -1930,7 +1896,7 @@ class YoutubeCommonApi
 		try {
 			return new BasicComment(resource);
 		}
-		catch (e) {
+		catch {
 		}
 	}
 }
@@ -2090,9 +2056,9 @@ class Users
 		return this.users[id];
 	}
 
-	query(startsWith)
+	getByName(name)
 	{
-		return this.index.query(startsWith);
+		return this.index.get(name);
 	}
 
 	parse(threads)
@@ -2106,9 +2072,7 @@ class Users
 			}
 		}
 
-		this.index = new ObjectIndex(
-			object.remap(this.users, 'name')
-		);
+		this.index = object.index(this.users, 'name');
 	}
 
 	addUser(id, name)
@@ -2128,46 +2092,7 @@ class Author
 	{
 		this.id = id;
 		this.name = name;
-		this.isProtected = false;
-	}
-
-	get displayName()
-	{
-		return this.isProtected ? this.name : this.nameFormatted;
-	}
-
-	get nameFormatted()
-	{
-		return this.nameFormatted_ ||= formatter.formatName(this.name);
-	}
-}
-
-class ObjectIndex
-{
-	constructor(o)
-	{
-		this.items = keys(o).sort(sort.alphabet).map(
-			k => [k.toLowerCase(), o[k]]
-		);
-	}
-
-	query(s)
-	{
-		s = s.toLowerCase();
-
-		const items = [];
-
-		for (const [k, v] of this.items)
-		{
-			if (k.startsWith(s)) {
-				items.push(v);
-			}
-			else if (items.length) {
-				break;
-			}
-		}
-
-		return items;
+		this.displayName = name.replace('@', '');
 	}
 }
 
@@ -2184,10 +2109,6 @@ class Parser
 
 	parse(threads, ctx)
 	{
-		object.safeSet(
-			ctx.users.get(ctx.uploaderId), {isProtected:true}
-		);
-
 		const query = {
 			normalized:nlp.normalize(ctx.query.string)
 		};
@@ -2221,7 +2142,7 @@ class Parser
 			});
 		}
 
-		let idList = [];
+		const idList = [];
 
 		threads = threads.filter(
 			thread => !idList.includes(thread.authorId) && idList.push(thread.authorId)
@@ -2360,36 +2281,20 @@ class Parser
 				}
 
 				if (x && !b.hasReplies) {
-					array.removeAt(threads, i) & i--;
+					array.removeAt(threads, i--);
 				}
 			}
 		});
 
-		let append = [];
-
-		threads.forEach((thread, i) =>
+		clone(threads).forEach(thread =>
 		{
-			if (i == threads.length - 1)
-			{
-				return append.forEach(
-					(j, k) => array.move(threads, j - k)
-				);
-			}
-
-			if (i == 0 && !thread.hasReplies)
-			{
-				if (query.normalized.string == thread.topComment.normalized.string) {
-					return append.push(i);
-				}
-			}
-
 			if (thread.hasReplies && thread.memberCount == 1)
 			{
 				const t1 = new Date(thread.topComment.publishedAt);
 				const t2 = new Date(thread.firstReply.publishedAt);
 
 				if (t2 - t1 < 300e3) {
-					return append.push(i);
+					return array.move(threads, thread);
 				}
 			}
 		});
@@ -2411,20 +2316,10 @@ class Parser
 
 			for (const reply of thread.replies)
 			{
-				const text = reply.parsedText;
-				const hint = string.grep(/^[+@]?(.{2})/, text);
-				const list = ctx.users.query(hint);
+				const name = string.grep(/@([@\w.-]+\w)/, reply.parsedText);
 
-				list.sort(
-					(a, b) => b.name.length - a.name.length
-				);
-
-				for (const author of list)
-				{
-					if (thread.hasMember(author.id) && this.getMentionRegex(author).test(text))
-					{
-						reply.toAuthor = author; break;
-					}
+				if (name) {
+					reply.toAuthor = ctx.users.getByName(name);
 				}
 			}
 
@@ -2496,7 +2391,7 @@ class Parser
 					}
 
 					reply.parsedText = reply.parsedText.replace(
-						this.getMentionRegex(toAuthor), mentionText + ' '
+						regex.create('/@%s[-,.:;?! ]*/', toAuthor.name), mentionText + ' '
 					);
 				}
 				else {
@@ -2510,15 +2405,6 @@ class Parser
 					}
 				}
 			});
-
-			for (let i = 1, n = thread.length; i < n; i++)
-			{
-				const reply = thread.comments[i];
-
-				if (reply.parent || reply.children.length) {
-					array.move(thread.comments, i) & i-- & n--;
-				}
-			}
 
 			let nonOwnerSpotted;
 
@@ -2583,11 +2469,6 @@ class Parser
 		);
 
 		return testCase || (threadIds[0] == curThreadId);
-	}
-
-	getMentionRegex(author)
-	{
-		return regex.create('/^[+@]?%s[-,.:;?! ]*/i', author.name);
 	}
 
 	fxProximity(subset, superset)
