@@ -50,6 +50,9 @@ html:not([dark]):not([fullscreen]) {
 	--cs-theme-color-disabled:#888;
 	--cs-grayscale:none;
 }
+html {
+	scrollbar-width:none !important;
+}
 ::-webkit-scrollbar {
 	display:none !important;
 }
@@ -148,6 +151,7 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp .CSScrollView {
 	overflow-y:scroll;
+	scrollbar-width:none;
 }
 #CSApp .CSInput {
 	color:inherit;

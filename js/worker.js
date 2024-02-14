@@ -437,6 +437,15 @@ class time
 		return '';
 	}
 
+	static pt2int(pt)
+	{
+		const u = {H:3600, M:60, S:1};
+
+		return string.match(/\d+[HMS]/g, pt).reduce(
+			(n, x) => n + parseInt(x) * u[x.at(-1)], 0
+		);
+	}
+
 	static hms2int(hms)
 	{
 		let	x = string.match(/\d+/g, hms),
@@ -2925,7 +2934,7 @@ class SearchModel extends WorkerPort
 
 			this.context = {
 				uploaderId:d.channelId,
-				videoTime:time.hms2int(d.duration),
+				videoTime:time.pt2int(d.duration),
 				videoId:this.id,
 			};
 
