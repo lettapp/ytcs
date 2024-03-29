@@ -6,7 +6,7 @@ Comments Search for Youtube allows you to search youtube comments without leavin
 
 #### Installation:
 You can install it directly from the [Chrome Web Store][cws] or manually using the instructions below:
-1. Unzip the extension folder.
+1. Extract the extension files.
 2. Go to `Extensions` > Enable `Developer Mode` > Select `Load unpacked`
 3. Select the extension folder and disable developer mode.
 

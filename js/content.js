@@ -1426,7 +1426,6 @@ class UIWindow extends UIView
 	{
 		super({
 			source:'UIWindow',
-			events:'mouseenter mouseleave',
 			width:width,
 			height:height
 		});
@@ -1451,16 +1450,6 @@ class UIWindow extends UIView
 		string.split('w e n ne nw we').forEach(
 			p => this.addSubview(new UIResizeBar(p))
 		);
-	}
-
-	onMouseenter()
-	{
-		dom.preventScroll(1);
-	}
-
-	onMouseleave()
-	{
-		dom.preventScroll(0);
 	}
 
 	setPosition(props)
@@ -3047,11 +3036,6 @@ class UIDocument extends UIElement
 		document.addEventListener('fullscreenchange',
 			_ => this.setFullscreenState()
 		);
-	}
-
-	preventScroll(bool)
-	{
-		this.condClass('CSNoScroll', bool);
 	}
 
 	handleMoveEvent(pointerMoveFn)

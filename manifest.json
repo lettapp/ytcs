@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "version": "3.112",
+    "version": "3.113",
     "minimum_chrome_version": "98",
     "name": "Comments Search for Youtube",
     "description": "Search youtube comments by keywords.",
@@ -21,7 +21,6 @@
     },
     "content_scripts": [
         {
-            "run_at": "document_start",
             "matches": [
                 "https://www.youtube.com/*"
             ],

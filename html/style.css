@@ -50,17 +50,8 @@ html:not([dark]):not([fullscreen]) {
 	--cs-theme-color-disabled:#888;
 	--cs-grayscale:none;
 }
-html {
-	scrollbar-width:none !important;
-}
-::-webkit-scrollbar {
-	display:none !important;
-}
 [hidden] {
 	display:none !important;
-}
-.CSNoScroll {
-	overflow:hidden !important;
 }
 .CSOnMove {
 	pointer-events:none;
@@ -76,7 +67,7 @@ html {
 	box-shadow:0 16px 24px 2px rgba(0, 0, 0, 0.14), 0 6px 30px 5px rgba(0, 0, 0, 0.12), 0 8px 10px -5px rgba(0, 0, 0, 0.4);
 	cursor:default;
 	user-select:none;
-	font:400 14px/20px Roboto, Arial;
+	font:400 14px/20px sans-serif;
 	-webkit-font-smoothing:antialiased;
 	overflow:visible;
 }
@@ -152,6 +143,7 @@ html {
 #CSApp .CSScrollView {
 	overflow-y:scroll;
 	scrollbar-width:none;
+	overscroll-behavior:contain;
 }
 #CSApp .CSInput {
 	color:inherit;
