@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "version": "3.113",
+    "version": "3.114",
     "minimum_chrome_version": "98",
     "name": "Comments Search for Youtube",
     "description": "Search youtube comments by keywords.",
@@ -9,7 +9,8 @@
         "128": "/assets/icon.png"
     },
     "permissions": [
-        "storage"
+        "storage",
+        "scripting"
     ],
     "host_permissions": [
         "https://www.youtube.com/*"
@@ -38,7 +39,7 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "html/*"
+                "/html/*"
             ],
             "matches": [
                 "https://www.youtube.com/*"

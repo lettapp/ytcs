@@ -1,4 +1,4 @@
-/* 
+/*
  * This code is part of Comments Search for Youtube chrome extension
  * 
  */
@@ -2116,7 +2116,9 @@ class AppController extends NavViewController
 
 		this.setModel(AppModel);
 
-		notifications.addListener(this, 'actionKeyPress userTrialRequest userDidAuth contextInvalidated');
+		notifications.addListener(this,
+			'actionKeyPress userTrialRequest userDidAuth contextInvalidated'
+		);
 	}
 
 	viewDidSet(view)
@@ -3155,6 +3157,8 @@ class App extends Main
 			self.dom = new UIDocument;
 			self.appController = new AppController;
 		});
+
+		document.querySelector('cs-app')?.remove();
 	}
 
 	authUser(apiKey)

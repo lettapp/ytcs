@@ -1,4 +1,4 @@
-/* 
+/*
  * This code is part of Comments Search for Youtube chrome extension
  * 
  */
@@ -1658,13 +1658,33 @@ class helper
 
 class tabs
 {
-	static reloadAccessible()
+	static execContentScript()
 	{
-		this.query({}).then(
-			tabs => tabs.forEach(
-				tab => tab.url && chrome.tabs.reload(tab.id)
-			)
-		);
+		const files = chrome.runtime.getManifest().content_scripts[0];
+
+		this.query({}).then(tabs =>
+		{
+			for (const tab of tabs)
+			{
+				if (!tab.url) {
+					continue;
+				}
+
+				chrome.scripting.executeScript({
+					target: {
+						tabId: tab.id
+					},
+					files: files.js
+				});
+
+				chrome.scripting.insertCSS({
+					target: {
+						tabId: tab.id
+					},
+					files: files.css
+				});
+			}
+		});
 	}
 
 	static query(p)
@@ -3071,7 +3091,7 @@ class App extends Main
 
 	onInstall()
 	{
-		tabs.reloadAccessible();
+		tabs.execContentScript();
 	}
 
 	onClientLoad(data, tab, callback)
