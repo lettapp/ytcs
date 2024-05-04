@@ -44,6 +44,13 @@ function on(s)
 	return 'on' + s[0].toUpperCase() + s.slice(1);
 }
 
+function match(value, ...cases)
+{
+	for (const [k, v] of cases) {
+		if (k === value) return v;
+	}
+}
+
 class is
 {
 	static null(x)
@@ -74,18 +81,6 @@ class is
 	static type(x)
 	{
 		return x?.constructor;
-	}
-}
-
-class std
-{
-	static switch(iterable, c = true)
-	{
-		for (const [k, v] of iterable) {
-			if (k === c) return v;
-		}
-
-		return c;
 	}
 }
 
@@ -798,14 +793,6 @@ class AppStorage extends Storage
 			assign(r, {
 				cache:{},
 				user:{},
-				pos:{},
-			});
-		}
-
-		if (appver < 3.1)
-		{
-			assign(r, {
-				cache:{},
 				pos:{},
 			});
 		}
@@ -1662,14 +1649,10 @@ class tabs
 	{
 		const files = chrome.runtime.getManifest().content_scripts[0];
 
-		this.query({}).then(tabs =>
+		this.getAccessible().then(tabs =>
 		{
 			for (const tab of tabs)
 			{
-				if (!tab.url) {
-					continue;
-				}
-
 				chrome.scripting.executeScript({
 					target: {
 						tabId: tab.id
@@ -1687,9 +1670,11 @@ class tabs
 		});
 	}
 
-	static query(p)
+	static getAccessible()
 	{
-		return chrome.tabs.query(p);
+		return chrome.tabs.query({}).then(
+			tabs => tabs.filter(tab => tab.url)
+		);
 	}
 }
 
@@ -2621,7 +2606,9 @@ class Index
 
 	query(q)
 	{
-		switch (q)
+		const s = q.string;
+
+		switch (s)
 		{
 			case ':':
 				return this.getAllFrames();
@@ -2639,9 +2626,13 @@ class Index
 				return this.getItemsWithReplies();
 		}
 
-		if (/^\d\d?:.*\d\d$/.test(q))
+		if (q.regexp) {
+			return this.getItemsByRegExp(q.regexp);
+		}
+
+		if (/^\d\d?:.*\d\d$/.test(s))
 		{
-			const t = this.parseTimetags(q);
+			const t = this.parseTimetags(s);
 
 			switch (t.length)
 			{
@@ -2653,7 +2644,7 @@ class Index
 			}
 		}
 
-		return this.getItemsByKeywords(q);
+		return this.getItemsByKeywords(s);
 	}
 
 	getAllItems()
@@ -2731,6 +2722,15 @@ class Index
 		}
 
 		return this.exportItems(ids);
+	}
+
+	getItemsByRegExp(re)
+	{
+		return this.getAllItems().filter(
+			thread => thread.comments.some(
+				comment => re.test(comment.sourceText)
+			)
+		);
 	}
 
 	getItemsByKeywords(str)
@@ -2857,10 +2857,6 @@ class SearchModel extends WorkerPort
 		try {
 			this.context.query = new SearchQuery(q);
 
-			if (!this.context.query.string) {
-				throw 'errInvalidRequest';
-			}
-
 			if (this.context.query.global) {
 				await this.globalSearch(r);
 			}
@@ -2892,20 +2888,15 @@ class SearchModel extends WorkerPort
 	{
 		response.setPotential(this.commentCount);
 
-		const videoId = this.id;
-		const fromIdx = this.isCachable;
-		const searchq = this.context.query.string;
-
 		if (!this.isSearchable) {
 			return;
 		}
 
-		if (fromIdx) {
-			return this.loadComments().then(
-				index => this.resolveRequest(index.query(searchq), response, fromIdx)
-			);
-		}
-		else {
+		if (!this.isCachable)
+		{
+			const videoId = this.id;
+			const searchq = this.context.query.string;
+
 			if (this.context.query.isReserved) {
 				throw 'errUnsupportedFeature';
 			}
@@ -2914,6 +2905,12 @@ class SearchModel extends WorkerPort
 				fetch => this.handleApiResponse(fetch, response)
 			);
 		}
+
+		return this.loadComments().then(
+			index => this.resolveRequest(
+				index.query(this.context.query), response, true
+			)
+		);
 	}
 
 	handleApiResponse(fetch, response)
@@ -2946,11 +2943,11 @@ class SearchModel extends WorkerPort
 
 			let d = fetch.data, n = +d.commentCount;
 
-			this.commentCount = std.switch([
+			this.commentCount = match(true,
 				[isNaN(n), CC_DIS],
 				[!n && time.since(d.publishedAt) < 7200, CC_NEW],
 				[true, n],
-			]);
+			);
 
 			this.context = {
 				uploaderId:d.channelId,
@@ -3038,15 +3035,31 @@ class SearchQuery
 	constructor(s)
 	{
 		let x = s.toLowerCase().trim(),
-			y = x.replace(/^global:\s*/, '');
+			y = x.replace(/^global:\s*/, ''),
+			z = string.grep('^/(.+)/([a-z]*)$', s);
 
-		this.string = y;
-		this.global = y != x;
+		if (z) {
+			try {
+				this.regexp = new RegExp(z[0], z[1]);
+				this.string = '';
+			}
+			catch (e) {
+				throw 'errInvalidRegex';
+			}
+		}
+		else {
+			this.string = y;
+			this.global = y != x;
+
+			if (!y) {
+				throw 'errEmptyQuery';
+			}
+		}
 	}
 
 	get isReserved()
 	{
-		return /^:(all|link|reply|creator)?$/.test(this);
+		return this.regexp || /^:($|all|link|reply|creator)/.test(this);
 	}
 
 	get isQuestion()

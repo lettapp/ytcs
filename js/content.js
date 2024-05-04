@@ -44,6 +44,13 @@ function on(s)
 	return 'on' + s[0].toUpperCase() + s.slice(1);
 }
 
+function match(value, ...cases)
+{
+	for (const [k, v] of cases) {
+		if (k === value) return v;
+	}
+}
+
 class is
 {
 	static null(x)
@@ -74,18 +81,6 @@ class is
 	static type(x)
 	{
 		return x?.constructor;
-	}
-}
-
-class std
-{
-	static switch(iterable, c = true)
-	{
-		for (const [k, v] of iterable) {
-			if (k === c) return v;
-		}
-
-		return c;
 	}
 }
 
@@ -798,14 +793,6 @@ class AppStorage extends Storage
 			assign(r, {
 				cache:{},
 				user:{},
-				pos:{},
-			});
-		}
-
-		if (appver < 3.1)
-		{
-			assign(r, {
-				cache:{},
 				pos:{},
 			});
 		}
@@ -1703,6 +1690,11 @@ class UIInput extends UIView
 		this.element.value = s;
 	}
 
+	get rawValue()
+	{
+		return String.raw`${this.value}`;
+	}
+
 	onKeydown(e)
 	{
 		if (e.key == 'Enter' && !e.shiftKey) {
@@ -2521,7 +2513,7 @@ class SearchView extends ViewController
 	searchTerm(q)
 	{
 		if (q == null) {
-			return this.input.value;
+			return this.input.rawValue;
 		}
 
 		this.input.value = q;
@@ -2647,23 +2639,23 @@ class UISearchMessageView extends UIView
 			searchRequestSent:		'Searching...',
 			errAwaitingResponse:	'Searching still...',
 			errNotWatchPage:		'You are not watching any video',
-			errInvalidRequest:		'Invalid request',
-			errZeroComments:		'This video has no comments',
-			errCommentsDisabled:	'Comments are disabled for this video.',
-			errNetwork:				'check your internet connection',
+			errEmptyQuery:			'empty search query',
+			errInvalidRegex:		'Invalid RegExp',
+			errZeroComments:		'no comments to search',
+			errNetwork:				'network error',
 			errServerDown:			'service down for maintenance',
 			errRequestTimeout:		'request timeout, try again',
 			errUnsupportedFeature:	'feature not supported for this video',
-			errParseError:			'invalid response from server, try again',
+			errParseError:			'Invalid response from server, try again',
 			errUnknown:				'unexpected error occured',
 
-			accessNotConfigured:	'the provided API key is not valid',
-			rateLimitExceeded:		'daily rate limit exceeded',
-			quotaExceeded:			'quota exceeded',
-			processingFailure:		'comments server is not responding',
+			accessNotConfigured:	'API key is not valid',
+			rateLimitExceeded:		'API rate limit exceeded',
+			quotaExceeded:			'API quota exceeded',
+			processingFailure:		'comments server not responding',
 			videoNotFound:			'video not found',
-			forbidden:				'your query could not be processed',
-			commentsDisabled:		'Comments are disabled for this video.'
+			forbidden:				'request could not be processed',
+			commentsDisabled:		'comments are disabled for this video'
 		};
 	}
 
@@ -2759,13 +2751,12 @@ function SearchModelDelegate(self)
 	return {
 		onCommentCount(n)
 		{
-			self.commentCounter.setLabel(
-				std.switch([
-					[CC_NON, 'zero'],
-					[CC_DIS, 'off'],
-					[CC_GLB, 'global'],
-				], n)
-			);
+			self.commentCounter.setLabel(match(n,
+				[CC_NON, 'zero'],
+				[CC_DIS, 'off'],
+				[CC_GLB, 'global'],
+				[n, n],
+			));
 
 			self.commentCounter.setState(
 				ext.isCachable(n) ? 'normal' : 'disabled'
@@ -2780,19 +2771,15 @@ function SearchModelDelegate(self)
 				return self.resultsView.pushInitialBatch() & self.showView(self.resultsView);
 			}
 
-			if (p < 1)
-			{
-				const id = std.switch([
+			if (p < 1) {
+				return self.messageView.showMessage(match(p,
 					[CC_NON, 'errZeroComments'],
-					[CC_DIS, 'errCommentsDisabled'],
+					[CC_DIS, 'commentsDisabled'],
 					[CC_GLB, 'emptyResponse'],
-				], p);
-
-				return self.messageView.showMessage(id);
+				));
 			}
 
-			if (p < 150)
-			{
+			if (p < 150) {
 				const action = new UIAnchor({
 					text:string.format('%s comments', p),
 					target:[self, 'onClick:getAllComments']

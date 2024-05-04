@@ -248,7 +248,6 @@ html:not([dark]):not([fullscreen]) {
 #CSApp .CSBackButton[state=hidden] {
 	visibility:hidden;
 }
-
 #CSApp .CSSearchHeader {
 	display:flex;
 	align-items:center;
@@ -398,7 +397,6 @@ html:not([dark]):not([fullscreen]) {
 #CSApp .CSFeaturesView {
 	color:var(--cs-info-view-text-color);
 }
-
 #CSApp .CSContentView {
 	display:flex;
 	flex-flow:column;
@@ -449,7 +447,6 @@ html:not([dark]):not([fullscreen]) {
 	margin:10px 0;
 	filter:var(--cs-grayscale);
 }
-
 #CSApp .CSFooterLink {
 	display:block;
 	color:var(--cs-link-color);
@@ -477,7 +474,6 @@ html:not([dark]):not([fullscreen]) {
 	font-size:small;
 	color:var(--cs-input-progress-color-error);
 }
-
 #CSApp .CSProgressBar {
 	position:absolute;
 	bottom:0;
@@ -531,11 +527,9 @@ html:not([dark]):not([fullscreen]) {
 		transform:translate3d(6px, 0, 0);
 	}
 }
-
 #CSApp .CSWiggle {
 	animation:wiggle 0.5s;
 }
-
 #CSApp .CSButton {
 	display:flex;
 	align-items:center;
