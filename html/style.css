@@ -67,11 +67,12 @@ html:not([dark]):not([fullscreen]) {
 	box-shadow:0 16px 24px 2px rgba(0, 0, 0, 0.14), 0 6px 30px 5px rgba(0, 0, 0, 0.12), 0 8px 10px -5px rgba(0, 0, 0, 0.4);
 	cursor:default;
 	user-select:none;
-	font:400 14px/20px sans-serif;
+	font:400 14px/20px Roboto, arial, sans-serif;
 	-webkit-font-smoothing:antialiased;
 	overflow:visible;
 }
 #CSApp * {
+	color:var(--cs-text-color);
 	position:relative;
 	box-sizing:border-box;
 	margin:0;
@@ -400,10 +401,10 @@ html:not([dark]):not([fullscreen]) {
 #CSApp .CSContentView {
 	display:flex;
 	flex-flow:column;
-	max-width:500px;
 	width:100%;
+	max-width:100%; 
 	height:100%;
-	padding:56px 40px 0;
+	padding:56px calc(50% - 190px) 0;
 	margin:auto;
 }
 #CSApp .CSContentView > * {
@@ -528,7 +529,7 @@ html:not([dark]):not([fullscreen]) {
 	}
 }
 #CSApp .CSWiggle {
-	animation:wiggle 0.5s;
+	animation:wiggle 500ms;
 }
 #CSApp .CSButton {
 	display:flex;
@@ -566,4 +567,48 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp .CSButtons .CSButton:last-child {
 	margin-right:0;
+}
+#CSApp .CSProgressButton {
+	width:178px;
+	height:38px;
+	border-radius:25px;
+	white-space:nowrap;
+	overflow:hidden;
+	font-size:14px;
+	font-weight:bold;
+}
+#CSApp .CSProgressButton > * {
+	position:absolute;
+	width:100%;
+	height:100%;
+	padding-top:1px;
+	color:var(--cs-theme-color);
+	border:1px solid var(--cs-theme-color);
+	background-color:none;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	border-radius:25px;
+	transition:filter 200ms;
+}
+#CSApp .CSProgressButton > :hover {
+	filter:brightness(.9);
+}
+#CSApp .CSProgressButton > :active {
+	filter:brightness(.8);
+}
+#CSApp .CSProgressButton > :first-child {
+	z-index:1;
+	width:0;
+	border:none;
+	border-top-right-radius:0;
+	border-bottom-right-radius:0;
+	color:var(--cs-button-color);
+	background-color:var(--cs-theme-color);
+}
+#CSApp .CSProgressButton > :after {
+	display:block !important;
+	content:attr(label);
+	position:absolute;
+	left:34px;
 }

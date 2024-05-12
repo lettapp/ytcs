@@ -111,7 +111,7 @@ class string
 
 	static replace(str, data)
 	{
-		return str.replace(/{([a-z]+)}/gi, (s, k) => data[k]);
+		return str.replace(/{([a-z]+)}/gi, (_, k) => data[k]);
 	}
 
 	static format(str, args)
@@ -234,7 +234,7 @@ class array
 		);
 	}
 
-	static remove(arr, item)
+	static remove(item, arr)
 	{
 		const i = arr.indexOf(item);
 
@@ -406,9 +406,9 @@ class time
 		return ~~(Date.now() / 1e3);
 	}
 
-	static since(str)
+	static diff(unix = 0)
 	{
-		return this.now() - this.toUnix(str);
+		return this.now() - unix;
 	}
 
 	static expired(unix = 0)
@@ -416,9 +416,14 @@ class time
 		return unix < this.now();
 	}
 
-	static ago(str)
+	static since(s)
 	{
-		let diff = this.since(str);
+		return this.now() - this.toUnix(s);
+	}
+
+	static ago(s)
+	{
+		let diff = this.since(s);
 
 		for (let [unit, mltp] of this.units)
 		{
@@ -471,9 +476,9 @@ class time
 		return arr.join(':').replace(/^[0:]{1,4}/, '');
 	}
 
-	static toUnix(str)
+	static toUnix(s)
 	{
-		return new Date(str).getTime() / 1e3;
+		return new Date(s).getTime() / 1e3;
 	}
 
 	static units = Object.entries({
@@ -538,7 +543,9 @@ class math
 
 	static pct(a, b)
 	{
-		return this.div(a, b) * 100;
+		return this.bound(
+			this.div(a, b) * 100, [0, 100]
+		);
 	}
 
 	static inverse(n)
@@ -648,8 +655,7 @@ class notifications
 	{
 		ids = string.split(ids);
 
-		for (const id of ids)
-		{
+		for (const id of ids) {
 			this.getChannel(id).add(target);
 		}
 	}
@@ -662,16 +668,14 @@ class notifications
 			ids = keys(this.channels);
 		}
 
-		for (const id of ids)
-		{
+		for (const id of ids) {
 			this.getChannel(id).delete(target);
 		}
 	}
 
 	static send(id, data)
 	{
-		for (const target of this.getChannel(id))
-		{
+		for (const target of this.getChannel(id)) {
 			target[on(id)](data);
 		}
 	}
@@ -705,9 +709,12 @@ class Storage
 
 	set(items)
 	{
-		assign(this.items, items);
+		return assign(this.items, items) && this.persist(items);
+	}
 
-		return this.persist(items);
+	remove(k)
+	{
+		return delete this.items[k] && this.local.remove(k);
 	}
 
 	persist(items)
@@ -779,29 +786,23 @@ class AppStorage extends Storage
 		);
 	}
 
-	upgrade(r)
+	upgrade(curr)
 	{
-		const newver = chrome.runtime.getManifest().version;
-		const appver = r.ver;
+		const ver = chrome.runtime.getManifest().version;
 
-		if (appver == newver) {
-			return;
-		}
-
-		if (!appver)
+		if (ver != curr.ver)
 		{
-			assign(r, {
+			let upgraded = assign({
 				cache:{},
 				user:{},
 				pos:{},
-			});
+				installed:time.now(),
+			}, curr);
+
+			this.persist(
+				assign(curr, upgraded, {ver})
+			);
 		}
-
-		assign(r, {
-			ver:newver
-		});
-
-		this.persist(r);
 	}
 }
 
@@ -925,10 +926,11 @@ class Main
 		);
 
 		this.register({
-			onStartup:chrome.runtime.onStartup,
-			onMessage:chrome.runtime.onMessage,
-			onConnect:chrome.runtime.onConnect,
-			onClicked:chrome.action?.onClicked,
+			onStartup: chrome.runtime.onStartup,
+			onMessage: chrome.runtime.onMessage,
+			onConnect: chrome.runtime.onConnect,
+			onClicked: chrome.action?.onClicked,
+			onCommand: chrome.commands?.onCommand,
 			onInstall: {
 				addListener: addEventListener.bind(null, 'install')
 			}
@@ -3059,7 +3061,7 @@ class SearchQuery
 
 	get isReserved()
 	{
-		return this.regexp || /^:($|all|link|reply|creator)/.test(this);
+		return this.regexp || /^:(all|link|reply|creator)?$/.test(this);
 	}
 
 	get isQuestion()

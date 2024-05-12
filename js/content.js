@@ -111,7 +111,7 @@ class string
 
 	static replace(str, data)
 	{
-		return str.replace(/{([a-z]+)}/gi, (s, k) => data[k]);
+		return str.replace(/{([a-z]+)}/gi, (_, k) => data[k]);
 	}
 
 	static format(str, args)
@@ -234,7 +234,7 @@ class array
 		);
 	}
 
-	static remove(arr, item)
+	static remove(item, arr)
 	{
 		const i = arr.indexOf(item);
 
@@ -406,9 +406,9 @@ class time
 		return ~~(Date.now() / 1e3);
 	}
 
-	static since(str)
+	static diff(unix = 0)
 	{
-		return this.now() - this.toUnix(str);
+		return this.now() - unix;
 	}
 
 	static expired(unix = 0)
@@ -416,9 +416,14 @@ class time
 		return unix < this.now();
 	}
 
-	static ago(str)
+	static since(s)
 	{
-		let diff = this.since(str);
+		return this.now() - this.toUnix(s);
+	}
+
+	static ago(s)
+	{
+		let diff = this.since(s);
 
 		for (let [unit, mltp] of this.units)
 		{
@@ -471,9 +476,9 @@ class time
 		return arr.join(':').replace(/^[0:]{1,4}/, '');
 	}
 
-	static toUnix(str)
+	static toUnix(s)
 	{
-		return new Date(str).getTime() / 1e3;
+		return new Date(s).getTime() / 1e3;
 	}
 
 	static units = Object.entries({
@@ -538,7 +543,9 @@ class math
 
 	static pct(a, b)
 	{
-		return this.div(a, b) * 100;
+		return this.bound(
+			this.div(a, b) * 100, [0, 100]
+		);
 	}
 
 	static inverse(n)
@@ -648,8 +655,7 @@ class notifications
 	{
 		ids = string.split(ids);
 
-		for (const id of ids)
-		{
+		for (const id of ids) {
 			this.getChannel(id).add(target);
 		}
 	}
@@ -662,16 +668,14 @@ class notifications
 			ids = keys(this.channels);
 		}
 
-		for (const id of ids)
-		{
+		for (const id of ids) {
 			this.getChannel(id).delete(target);
 		}
 	}
 
 	static send(id, data)
 	{
-		for (const target of this.getChannel(id))
-		{
+		for (const target of this.getChannel(id)) {
 			target[on(id)](data);
 		}
 	}
@@ -705,9 +709,12 @@ class Storage
 
 	set(items)
 	{
-		assign(this.items, items);
+		return assign(this.items, items) && this.persist(items);
+	}
 
-		return this.persist(items);
+	remove(k)
+	{
+		return delete this.items[k] && this.local.remove(k);
 	}
 
 	persist(items)
@@ -779,29 +786,23 @@ class AppStorage extends Storage
 		);
 	}
 
-	upgrade(r)
+	upgrade(curr)
 	{
-		const newver = chrome.runtime.getManifest().version;
-		const appver = r.ver;
+		const ver = chrome.runtime.getManifest().version;
 
-		if (appver == newver) {
-			return;
-		}
-
-		if (!appver)
+		if (ver != curr.ver)
 		{
-			assign(r, {
+			let upgraded = assign({
 				cache:{},
 				user:{},
 				pos:{},
-			});
+				installed:time.now(),
+			}, curr);
+
+			this.persist(
+				assign(curr, upgraded, {ver})
+			);
 		}
-
-		assign(r, {
-			ver:newver
-		});
-
-		this.persist(r);
 	}
 }
 
@@ -925,10 +926,11 @@ class Main
 		);
 
 		this.register({
-			onStartup:chrome.runtime.onStartup,
-			onMessage:chrome.runtime.onMessage,
-			onConnect:chrome.runtime.onConnect,
-			onClicked:chrome.action?.onClicked,
+			onStartup: chrome.runtime.onStartup,
+			onMessage: chrome.runtime.onMessage,
+			onConnect: chrome.runtime.onConnect,
+			onClicked: chrome.action?.onClicked,
+			onCommand: chrome.commands?.onCommand,
 			onInstall: {
 				addListener: addEventListener.bind(null, 'install')
 			}
@@ -1146,6 +1148,11 @@ class UIElement extends UIResponder
 		cond ? this.addClass(s) : this.delClass(s);
 	}
 
+	tempClass(s, ms)
+	{
+		this.addClass(s) & setTimeout(_ => this.delClass(s), ms);
+	}
+
 	addStyles(p)
 	{
 		assign(this.style, p);
@@ -1207,16 +1214,16 @@ class UIView extends UIElement
 			this.import(init.import);
 		}
 
+		if (init.styles) {
+			this.addClass(init.styles);
+		}
+
 		if (init.events) {
 			this.addListener(init.events);
 		}
 
 		if (init.target) {
 			this.addTarget(...init.target);
-		}
-
-		if (init.styles) {
-			this.addClass(init.styles);
 		}
 
 		if (init.attrs) {
@@ -1235,9 +1242,8 @@ class UIView extends UIElement
 
 		if (init.superview)
 		{
-			const [view, domId] = init.superview;
-
-			view.addSubview(this, domId);
+			const [view, targetId] = init.superview;
+			view.addSubview(this, targetId);
 		}
 
 		this.didInit(init);
@@ -1246,7 +1252,7 @@ class UIView extends UIElement
 	didInit(init) {
 	}
 
-	addSubview(view, domId)
+	addSubview(view, targetId)
 	{
 		if (view.superview)
 		{
@@ -1259,18 +1265,18 @@ class UIView extends UIElement
 
 		(view.superview = this).subviews.push(view);
 
-		if (domId) {
-			this.queryId(domId).appendChild(view.element);
+		if (targetId) {
+			this.queryId(targetId).appendChild(view.element);
 		}
 		else {
 			this.appendChild(view);
 		}
 	}
 
-	addSubviews(views, domId)
+	addSubviews(views, targetId)
 	{
 		for (const view of views) {
-			this.addSubview(view, domId);
+			this.addSubview(view, targetId);
 		}
 	}
 
@@ -1278,7 +1284,7 @@ class UIView extends UIElement
 	{
 		view.superview = null;
 
-		array.remove(this.subviews, view).remove();
+		array.remove(view, this.subviews).remove();
 	}
 
 	removeFromSuperview()
@@ -1534,19 +1540,17 @@ class UIWindow extends UIView
 
 	onManipulationEnd()
 	{
-		let props, rect = this.rect;
+		const rect = this.rect;
 
 		if (rect.width == 0) {
 			return;
 		}
 
-		props = {
+		this.delegate.didResize({
 			top:math.pct(rect.y, window.innerHeight),
 			left:math.pct(rect.x, window.innerWidth),
 			width:math.pct(rect.width, window.innerWidth),
-		};
-
-		this.delegate.didResize(props);
+		});
 	}
 }
 
@@ -1670,7 +1674,7 @@ class UIInput extends UIView
 	{
 		UI.extend(init, {
 			source:'UIInput',
-			import:'placeholder focus select',
+			import:'placeholder focus select blur',
 			events:'focus keydown input',
 			attrs: {
 				placeholder: init.placeholder
@@ -1982,7 +1986,7 @@ class ViewController extends UIResponder
 			child.viewWillDisappear();
 		}
 
-		array.remove(this.children, child).destruct();
+		array.remove(child, this.children).destruct();
 
 		if (this.isVisible) {
 			child.viewDidDisappear();
@@ -2341,19 +2345,46 @@ class AuthHelpView extends ViewController
 {
 	constructor()
 	{
-		super(
-			new UIView({source:'UIHelpView'})
+		const usage = math.pct(
+			time.diff(mem.installed), (6 * 86400)
 		);
+
+		super(
+			new UIView({source:'UIHelpView', data:{usage}})
+		);
+
+		this.usage = usage;
 	}
 
 	viewDidSet(view)
 	{
-		new UIButton({
-			styles:'CSButton',
-			label:'try it without key',
-			target:[this, 'onClick:onTrial'],
-			superview:[view, 'actionBtns']
+		let btn = new UIButton({
+			source:'UIProgressButton',
+			import:'children animate',
+			data:{label:'Try it without key'},
+			superview:[view, 'actionBtns'],
 		});
+
+		let remain = 100 - view.data.usage,
+			frames = [remain < 50 ? 0 : 100, remain],
+			timing = 9 * Math.abs(frames[0] - frames[1]);
+
+		frames = frames.map(
+			n => ({width:`${n}%`})
+		);
+
+		btn.children[0].animate(frames, {duration:timing, fill:'forwards'}).finished.then(
+			_ => btn.addTarget(this, 'onClick:tryButtonClicked')
+		);
+	}
+
+	tryButtonClicked(btn)
+	{
+		if (this.usage == 100) {
+			return btn.tempClass('CSWiggle', 500);
+		}
+
+		this.handleAction('onTrial');
 	}
 }
 
@@ -2419,6 +2450,7 @@ class SearchView extends ViewController
 
 		this.messageView.clear();
 		this.resultsView.pauseInlinePlayer();
+		this.input.blur();
 	}
 
 	onActionKeyPress(code)
@@ -2475,6 +2507,11 @@ class SearchView extends ViewController
 	showFeaturesView()
 	{
 		this.present(new FeaturesView);
+	}
+
+	showShortcutsView()
+	{
+		this.present(new ShortcutsView);
 	}
 
 	auditContext()
