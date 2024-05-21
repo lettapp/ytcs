@@ -3,6 +3,7 @@
 	<a protoid="UIAnchor" target="_blank"></a>
 	<img protoid="UIImage" src="">
 	<cs-app protoid="UIWindow" id="CSApp" hidden>
+		<link rel="stylesheet" href="{url}html/style.css">
 		<div class="CSViewStack" id="views"></div>
 	</cs-app>
 	<div protoid="UINavView">
@@ -38,10 +39,26 @@
 			<li>Use <code>0:00-0:19</code> to search within specific time frame.
 			<li>Use <code>/.../</code> for RegExp search.
 		</ul>
-		<p>Global Search - available on all videos:
+		<p>Global Search - Available on all videos:
 		<ul>
-			<li>Use <code>global:</code> to search all channel comments, for example <code>global: xyz</code> will search for "xyz" on all channel videos.
+			<li>Type <code>global:</code> followed by keywords to search all channel videos.
 		</ul>
+		<p>General Settings:
+		<ul>
+			<li>Type <code>:keyboard</code> to change keyboard shortcuts.
+		</ul>
+	</div>
+	<div protoid="UICommandsView" class="CSContentView CSFeaturesView">
+		<h1>Keyboard Shortcuts</h1>
+		<p>If you try to set a shortcut and don't get feedback, it's being used by other extension and needs to be released first.</p>
+		<p>The <code>shift + ?</code> pattern is recommended because it's rarely used.</p>
+		<p></p>
+	</div>
+	<div protoid="UICommand" class="CSCommand">
+		<label>{title}</label>
+		<edit id="commandInput">
+			<error></error>
+		</edit>
 	</div>
 	<div protoid="UIAuthView" class="CSContentView CSFlexCenter">
 		<h1>Welcome!</h1>
@@ -62,7 +79,7 @@
 		</div>
 	</div>
 	<div protoid="UIErrorView" class="CSContentView CSFlexCenter">
-		<h1>Hmmm..</h1>
+		<h1>Hmm..</h1>
 		<div>We lost connection with the mothership!</div>
 		<div>enable the extension and try again</div>
 	</div>

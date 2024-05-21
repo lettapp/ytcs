@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
-    "version": "3.115",
-    "minimum_chrome_version": "98",
+    "version": "24.05.21",
+    "minimum_chrome_version": "100",
     "name": "Comments Search for Youtube",
     "description": "Search youtube comments by keywords.",
     "icons": {
@@ -22,11 +22,9 @@
     },
     "content_scripts": [
         {
+            "run_at": "document_idle",
             "matches": [
                 "https://www.youtube.com/*"
-            ],
-            "css": [
-                "/html/style.css"
             ],
             "js": [
                 "/js/content.js"

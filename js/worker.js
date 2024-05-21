@@ -5,9 +5,8 @@
 'use strict';
 
 const CC_NON = 0;
-const CC_NEW = -1;
-const CC_DIS = -2;
-const CC_GLB = -3;
+const CC_DIS = -1;
+const CC_GLB = -2;
 
 function none()
 {
@@ -24,9 +23,14 @@ function values(object)
 	return Object.values(object);
 }
 
+function entries(object)
+{
+	return Object.entries(object);
+}
+
 function unpack(object)
 {
-	return Object.entries(object).shift();
+	return entries(object).shift();
 }
 
 function assign()
@@ -66,6 +70,11 @@ class is
 	static string(x)
 	{
 		return this.type(x) == String;
+	}
+
+	static array(x)
+	{
+		return this.type(x) == Array;
 	}
 
 	static object(x)
@@ -216,13 +225,16 @@ class string
 
 class array
 {
-	static MAP_MODE_SKIP = 1;
-	static MAP_MODE_STOP = 2;
-	static MAP_MODE_FAIL = 3;
-
 	static cast(x)
 	{
-		return x instanceof Array ? x : [x];
+		return is.array(x) ? x : [x];
+	}
+
+	static isEqual(a, b)
+	{
+		return !a.some(
+			(v, i) => v !== b[i]
+		);
 	}
 
 	static move(arr, any, to = Infinity)
@@ -324,6 +336,10 @@ class array
 
 		return items;
 	}
+
+	static MAP_MODE_SKIP = 1;
+	static MAP_MODE_STOP = 2;
+	static MAP_MODE_FAIL = 3;
 }
 
 class object
@@ -481,7 +497,7 @@ class time
 		return new Date(s).getTime() / 1e3;
 	}
 
-	static units = Object.entries({
+	static units = entries({
 		year:	1 * 60 * 60 * 24 * 30 * 12,
 		month:	1 * 60 * 60 * 24 * 30,
 		week:	1 * 60 * 60 * 24 * 7,
@@ -494,12 +510,16 @@ class time
 
 class math
 {
-	static randint(len, asString)
+	static randint(n, asString)
 	{
-		let s = Math.random().toString().slice(2, len + 2);
+		let s = '0';
 
-		if (s[0] == '0' || s.length != len) {
-			return this.randint(len, asString);
+		if (n !== +n || n < 1 || n > 16) {
+			throw 'out of bound';
+		}
+
+		while(s[0] == '0' || s.length != n) {
+			s = Math.random().toString().slice(2, n + 2);
 		}
 
 		return asString ? s : +s;
@@ -625,8 +645,6 @@ class interval
 
 class ext
 {
-	static CACHE_MAX = 1000;
-
 	static isCachable(n)
 	{
 		return 0 < n && n < this.CACHE_MAX;
@@ -647,6 +665,8 @@ class ext
 			auth:'/html/svg/auth.svg',
 		}
 	}, chrome.runtime.getURL);
+
+	static CACHE_MAX = 1000;
 }
 
 class notifications
@@ -782,7 +802,7 @@ class AppStorage extends Storage
 		this.items[k] = change.newValue;
 
 		notifications.send(
-			string.format('%sDataDidChange', k), change
+			string.format('%sDataChange', k), change
 		);
 	}
 
@@ -797,6 +817,12 @@ class AppStorage extends Storage
 				user:{},
 				pos:{},
 				installed:time.now(),
+				commands: {
+					start:['ctrlKey', 'KeyS'],
+					close:['Escape'],
+					fsClose:['shiftKey', 'KeyX'],
+					tsSearch:['shiftKey', 'KeyT'],
+				}
 			}, curr);
 
 			this.persist(
@@ -930,7 +956,6 @@ class Main
 			onMessage: chrome.runtime.onMessage,
 			onConnect: chrome.runtime.onConnect,
 			onClicked: chrome.action?.onClicked,
-			onCommand: chrome.commands?.onCommand,
 			onInstall: {
 				addListener: addEventListener.bind(null, 'install')
 			}
@@ -988,8 +1013,7 @@ class Cloneable
 		const props = Object.getOwnPropertyDescriptors(x);
 		const clone = Object.create(proto, props);
 
-		for (const i in clone)
-		{
+		for (const i in clone) {
 			clone[i] = this.probe(clone[i]);
 		}
 
@@ -1660,13 +1684,6 @@ class tabs
 						tabId: tab.id
 					},
 					files: files.js
-				});
-
-				chrome.scripting.insertCSS({
-					target: {
-						tabId: tab.id
-					},
-					files: files.css
 				});
 			}
 		});
@@ -2939,32 +2956,22 @@ class SearchModel extends WorkerPort
 	{
 		return this.contextLoad ||= api.v3.getVideoDetails(this.id).then(fetch =>
 		{
+			const {commentCount, channelId, duration} = fetch.data;
+
 			if (fetch.error) {
 				delete this.contextLoad; throw fetch.error;
 			}
 
-			let d = fetch.data, n = +d.commentCount;
-
-			this.commentCount = match(true,
-				[isNaN(n), CC_DIS],
-				[!n && time.since(d.publishedAt) < 7200, CC_NEW],
-				[true, n],
-			);
+			this.commentCount = is.null(commentCount) ? CC_DIS : +commentCount;
 
 			this.context = {
-				uploaderId:d.channelId,
-				videoTime:time.pt2int(d.duration),
 				videoId:this.id,
+				uploaderId:channelId,
+				videoTime:time.pt2int(duration),
 			};
 
 			if (this.isCachable) {
 				this.loadComments();
-			}
-
-			if (this.isNew) {
-				return this.loadComments().then(
-					index => this.commentCount = index.count
-				);
 			}
 		});
 	}
@@ -2979,11 +2986,6 @@ class SearchModel extends WorkerPort
 
 			return this.index = new Index(fetch.data, this.context);
 		});
-	}
-
-	get isNew()
-	{
-		return this.commentCount == CC_NEW;
 	}
 
 	get isCachable()
@@ -3118,7 +3120,7 @@ class App extends Main
 
 	async onUserAuth(apiKey, tab, callback)
 	{
-		let err, r = await api.ytd.setKey(apiKey, true);
+		let r = await api.ytd.setKey(apiKey, true);
 
 		if (r.ok)
 		{
@@ -3130,18 +3132,7 @@ class App extends Main
 			}
 		}
 
-		if (err = r.error)
-		{
-			const m = {
-				badRequest:'invalid key',
-				errNetwork:'you seem to be offline',
-				errUnknown:'try again',
-			};
-
-			err = m[err] || m.errUnknown;
-		}
-
-		callback(err);
+		callback(r.error);
 	}
 }
 

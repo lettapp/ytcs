@@ -5,9 +5,8 @@
 'use strict';
 
 const CC_NON = 0;
-const CC_NEW = -1;
-const CC_DIS = -2;
-const CC_GLB = -3;
+const CC_DIS = -1;
+const CC_GLB = -2;
 
 function none()
 {
@@ -24,9 +23,14 @@ function values(object)
 	return Object.values(object);
 }
 
+function entries(object)
+{
+	return Object.entries(object);
+}
+
 function unpack(object)
 {
-	return Object.entries(object).shift();
+	return entries(object).shift();
 }
 
 function assign()
@@ -66,6 +70,11 @@ class is
 	static string(x)
 	{
 		return this.type(x) == String;
+	}
+
+	static array(x)
+	{
+		return this.type(x) == Array;
 	}
 
 	static object(x)
@@ -216,13 +225,16 @@ class string
 
 class array
 {
-	static MAP_MODE_SKIP = 1;
-	static MAP_MODE_STOP = 2;
-	static MAP_MODE_FAIL = 3;
-
 	static cast(x)
 	{
-		return x instanceof Array ? x : [x];
+		return is.array(x) ? x : [x];
+	}
+
+	static isEqual(a, b)
+	{
+		return !a.some(
+			(v, i) => v !== b[i]
+		);
 	}
 
 	static move(arr, any, to = Infinity)
@@ -324,6 +336,10 @@ class array
 
 		return items;
 	}
+
+	static MAP_MODE_SKIP = 1;
+	static MAP_MODE_STOP = 2;
+	static MAP_MODE_FAIL = 3;
 }
 
 class object
@@ -481,7 +497,7 @@ class time
 		return new Date(s).getTime() / 1e3;
 	}
 
-	static units = Object.entries({
+	static units = entries({
 		year:	1 * 60 * 60 * 24 * 30 * 12,
 		month:	1 * 60 * 60 * 24 * 30,
 		week:	1 * 60 * 60 * 24 * 7,
@@ -494,12 +510,16 @@ class time
 
 class math
 {
-	static randint(len, asString)
+	static randint(n, asString)
 	{
-		let s = Math.random().toString().slice(2, len + 2);
+		let s = '0';
 
-		if (s[0] == '0' || s.length != len) {
-			return this.randint(len, asString);
+		if (n !== +n || n < 1 || n > 16) {
+			throw 'out of bound';
+		}
+
+		while(s[0] == '0' || s.length != n) {
+			s = Math.random().toString().slice(2, n + 2);
 		}
 
 		return asString ? s : +s;
@@ -625,8 +645,6 @@ class interval
 
 class ext
 {
-	static CACHE_MAX = 1000;
-
 	static isCachable(n)
 	{
 		return 0 < n && n < this.CACHE_MAX;
@@ -647,6 +665,8 @@ class ext
 			auth:'/html/svg/auth.svg',
 		}
 	}, chrome.runtime.getURL);
+
+	static CACHE_MAX = 1000;
 }
 
 class notifications
@@ -782,7 +802,7 @@ class AppStorage extends Storage
 		this.items[k] = change.newValue;
 
 		notifications.send(
-			string.format('%sDataDidChange', k), change
+			string.format('%sDataChange', k), change
 		);
 	}
 
@@ -797,6 +817,12 @@ class AppStorage extends Storage
 				user:{},
 				pos:{},
 				installed:time.now(),
+				commands: {
+					start:['ctrlKey', 'KeyS'],
+					close:['Escape'],
+					fsClose:['shiftKey', 'KeyX'],
+					tsSearch:['shiftKey', 'KeyT'],
+				}
 			}, curr);
 
 			this.persist(
@@ -930,7 +956,6 @@ class Main
 			onMessage: chrome.runtime.onMessage,
 			onConnect: chrome.runtime.onConnect,
 			onClicked: chrome.action?.onClicked,
-			onCommand: chrome.commands?.onCommand,
 			onInstall: {
 				addListener: addEventListener.bind(null, 'install')
 			}
@@ -1007,13 +1032,11 @@ class UIResponder
 	{
 		let nextResponder;
 
-		if (action in this && this != sender)
-		{
+		if (action in this && this != sender) {
 			return this[action](sender, data);
 		}
 
-		if (nextResponder = this.parent || this.superview)
-		{
+		if (nextResponder = this.parent || this.superview) {
 			return nextResponder.handleAction(action, sender, data);
 		}
 	}
@@ -1210,6 +1233,8 @@ class UIView extends UIElement
 
 	init(init)
 	{
+		this.data = init.data;
+
 		if (init.import) {
 			this.import(init.import);
 		}
@@ -1234,10 +1259,6 @@ class UIView extends UIElement
 
 		if (init.text) {
 			this.textContent = init.text;
-		}
-
-		if (init.data) {
-			this.data = init.data;
 		}
 
 		if (init.superview)
@@ -1417,10 +1438,13 @@ class UIWindow extends UIView
 {
 	constructor(width, height)
 	{
+		const url = chrome.runtime.getURL('/');
+
 		super({
 			source:'UIWindow',
+			data:{url},
 			width:width,
-			height:height
+			height:height,
 		});
 
 		this.minWidth = width;
@@ -1674,14 +1698,21 @@ class UIInput extends UIView
 	{
 		UI.extend(init, {
 			source:'UIInput',
-			import:'placeholder focus select blur',
-			events:'focus keydown input',
+			import:'name placeholder focus select blur',
+			events:'focus keydown input blur',
 			attrs: {
-				placeholder: init.placeholder
+				name:init.name,
+				value:init.value,
+				placeholder:init.placeholder,
 			}
 		});
 
 		super(init);
+	}
+
+	didInit(init)
+	{
+		this.value = init.value ?? '';
 	}
 
 	get value()
@@ -1715,6 +1746,11 @@ class UIInput extends UIView
 		if (e.inputType == 'insertFromPaste') {
 			this.sendAction('onPaste');
 		}
+	}
+
+	onFocus()
+	{
+		this.sendAction('onFocus');
 	}
 }
 
@@ -2106,14 +2142,14 @@ class AppController extends NavViewController
 {
 	constructor()
 	{
-		const view = new UIWindow(460, 480);
+		const view = new UIWindow(460, 500);
 
 		super(view, AppViewDelegate);
 
 		this.setModel(AppModel);
 
 		notifications.addListener(this,
-			'actionKeyPress userTrialRequest userDidAuth contextInvalidated'
+			'command userTrialRequest userDidAuth contextInvalidated'
 		);
 	}
 
@@ -2134,8 +2170,6 @@ class AppController extends NavViewController
 		else {
 			this.onAuthRequired();
 		}
-
-		dom.appendChild(view);
 	}
 
 	modelDidSet()
@@ -2145,13 +2179,13 @@ class AppController extends NavViewController
 		);
 	}
 
-	onActionKeyPress(code)
+	onCommand(c)
 	{
-		if (code == 'KeyS' || code == 'KeyE') {
-			return this.start(code);
+		if (c == 'start' || c == 'tsSearch') {
+			return this.start(c);
 		}
 
-		if (code == 'Escape') {
+		if (c == 'close' || c == 'fsClose') {
 			return this.close();
 		}
 	}
@@ -2346,7 +2380,7 @@ class AuthHelpView extends ViewController
 	constructor()
 	{
 		const usage = math.pct(
-			time.diff(mem.installed), (6 * 86400)
+			time.diff(mem.installed), (30 * 86400)
 		);
 
 		super(
@@ -2358,24 +2392,15 @@ class AuthHelpView extends ViewController
 
 	viewDidSet(view)
 	{
-		let btn = new UIButton({
+		const btn = new UIButton({
 			source:'UIProgressButton',
-			import:'children animate',
+			import:'children',
 			data:{label:'Try it without key'},
+			target:[this, 'onClick:tryButtonClicked'],
 			superview:[view, 'actionBtns'],
 		});
 
-		let remain = 100 - view.data.usage,
-			frames = [remain < 50 ? 0 : 100, remain],
-			timing = 9 * Math.abs(frames[0] - frames[1]);
-
-		frames = frames.map(
-			n => ({width:`${n}%`})
-		);
-
-		btn.children[0].animate(frames, {duration:timing, fill:'forwards'}).finished.then(
-			_ => btn.addTarget(this, 'onClick:tryButtonClicked')
-		);
+		btn.children[0].style.width = `${100 - view.data.usage}%`;
 	}
 
 	tryButtonClicked(btn)
@@ -2398,7 +2423,7 @@ class SearchView extends ViewController
 
 		this.didAuth = !trialMode;
 
-		notifications.addListener(this, 'actionKeyPress');
+		notifications.addListener(this, 'command');
 	}
 
 	viewDidSet(view)
@@ -2453,14 +2478,14 @@ class SearchView extends ViewController
 		this.input.blur();
 	}
 
-	onActionKeyPress(code)
+	onCommand(c)
 	{
-		if (code == 'KeyE') {
-			return this.searchCurrentTime();
+		if (c == 'start') {
+			return this.input.select();
 		}
 
-		if (code == 'KeyS') {
-			return this.input.select();
+		if (c == 'tsSearch') {
+			return this.searchCurrentTime();
 		}
 	}
 
@@ -2470,6 +2495,10 @@ class SearchView extends ViewController
 
 		if (!q) {
 			return;
+		}
+
+		if (q == ':keyboard') {
+			return this.showCommandsView();
 		}
 
 		if (!yt.isWatchPage) {
@@ -2509,9 +2538,9 @@ class SearchView extends ViewController
 		this.present(new FeaturesView);
 	}
 
-	showShortcutsView()
+	showCommandsView()
 	{
-		this.present(new ShortcutsView);
+		this.present(new CommandsView);
 	}
 
 	auditContext()
@@ -2667,32 +2696,30 @@ class UISearchMessageView extends UIView
 {
 	constructor()
 	{
-		super({
-			styles:'CSDialogMessage'
-		});
+		super({styles:'CSDialogMessage'});
 
 		this.messages = {
-			emptyResponse:			'no results match your query',
+			emptyResponse:			'No results match your query',
 			searchRequestSent:		'Searching...',
 			errAwaitingResponse:	'Searching still...',
 			errNotWatchPage:		'You are not watching any video',
-			errEmptyQuery:			'empty search query',
+			errEmptyQuery:			'Empty search query',
 			errInvalidRegex:		'Invalid RegExp',
-			errZeroComments:		'no comments to search',
-			errNetwork:				'network error',
-			errServerDown:			'service down for maintenance',
-			errRequestTimeout:		'request timeout, try again',
-			errUnsupportedFeature:	'feature not supported for this video',
+			errZeroComments:		'No comments to search',
+			errNetwork:				'Network error',
+			errServerDown:			'Service down for maintenance',
+			errRequestTimeout:		'Request timeout',
+			errUnsupportedFeature:	'Feature not supported for this video',
 			errParseError:			'Invalid response from server, try again',
-			errUnknown:				'unexpected error occured',
+			errUnknown:				'An unexpected error occured',
 
-			accessNotConfigured:	'API key is not valid',
-			rateLimitExceeded:		'API rate limit exceeded',
-			quotaExceeded:			'API quota exceeded',
-			processingFailure:		'comments server not responding',
-			videoNotFound:			'video not found',
-			forbidden:				'request could not be processed',
-			commentsDisabled:		'comments are disabled for this video'
+			accessNotConfigured:	'Access not configured',
+			rateLimitExceeded:		'Rate limit exceeded',
+			quotaExceeded:			'Quota exceeded',
+			processingFailure:		'Processing failure',
+			videoNotFound:			'Video not found',
+			forbidden:				'Request could not be processed',
+			commentsDisabled:		'Comments are turned off',
 		};
 	}
 
@@ -3039,6 +3066,206 @@ class FeaturesView extends ViewController
 	}
 }
 
+class CommandsView extends ViewController
+{
+	constructor()
+	{
+		const commands = mem.commands;
+
+		const items = [{
+			name:'start',
+			title:'Start the extension',
+			value:commands.start
+		},{
+			name:'close',
+			title:'Close the extension',
+			accept:{Escape:'Esc'},
+			value:commands.close,
+		},{
+			name:'fsClose',
+			title:'Close while in fullscreen',
+			reject:{Escape:'Esc key is reserved in fullscreen'},
+			value:commands.fsClose,
+		},{
+			name:'tsSearch',
+			title:'Search current video time',
+			value:commands.tsSearch,
+		}];
+
+		super(
+			new UICommandsView(items)
+		);
+	}
+
+	onCommandChange(_, change)
+	{
+		assign(mem.commands, change);
+	}
+
+	onEditState(_, newState)
+	{
+		notifications.send('commandEdit', newState);
+	}
+}
+
+class UICommandsView extends UIView
+{
+	constructor(items)
+	{
+		super({source:'UICommandsView', items});
+	}
+
+	didInit({items})
+	{
+		for (const item of items)
+		{
+			this.addSubview(
+				new UICommand(item)
+			);
+		}
+	}
+
+	onCommandChange({name}, keys)
+	{
+		this.handleAction('onCommandChange', this, {[name]:keys});
+
+		if (!keys.length) {
+			return;
+		}
+
+		this.subviews.some(
+			({input}) => (input.name != name) && array.isEqual(input.value, keys) && input.newValue([])
+		);
+	}
+
+	onFocus()
+	{
+		this.handleAction('onEditState', this, 1);
+	}
+
+	onBlur()
+	{
+		this.handleAction('onEditState', this, 0);
+	}
+}
+
+class UICommand extends UIView
+{
+	constructor(item)
+	{
+		super({source:'UICommand', data:item});
+	}
+
+	didInit({data})
+	{
+		this.addSubview(
+			this.input = new UICommandInput(data), 'commandInput'
+		);
+
+		this.error = this.querySelector('error');
+	}
+
+	onError(sender, message)
+	{
+		this.error.textContent = message;
+	}
+
+	onBlur()
+	{
+		this.error.textContent = '';
+
+		this.handleAction('onBlur', this);
+	}
+}
+
+class UICommandInput extends UIInput
+{
+	constructor(init)
+	{
+		super(init);
+	}
+
+	didInit(init)
+	{
+		super.didInit(init);
+
+		this.accept = init.accept ?? {};
+		this.reject = init.reject ?? {};
+
+		this.placeholder = 'none';
+	}
+
+	onFocus()
+	{
+		this.newValue([]) & super.onFocus();
+	}
+
+	onKeydown(e)
+	{
+		e.preventDefault();
+
+		if (!e.repeat) {
+			this.evaluate(e, e.key, e.code);
+		}
+	}
+
+	evaluate(e, key, code)
+	{
+		let keys = [];
+
+		if (['Ctrl', 'Shift', 'Alt', 'Meta'].includes(key)) {
+			return;
+		}
+
+		if (this.reject[code]) {
+			return this.error(this.reject[code]);
+		}
+
+		if (code == 'Escape' && !this.accept[code]) {
+			return this.blur();
+		}
+
+		if (!this.accept[code])
+		{
+			keys = ['ctrlKey', 'altKey', 'shiftKey', 'metaKey'].filter(k => e[k]);
+
+			if (!keys.length) {
+				return this.error('Use Ctrl-Alt-Shift-Meta keys');
+			}
+		}
+
+		keys.push(code) & this.newValue(keys) & this.blur();
+	}
+
+	newValue(keys)
+	{
+		this.value = keys;
+
+		this.handleAction('onCommandChange', this, keys);
+	}
+
+	error(message)
+	{
+		this.handleAction('onError', this, message);
+	}
+
+	set value(keys)
+	{
+		this.inner = keys;
+
+		keys = keys.map(
+			s => string.capitalize(s.replace(/key|digit/i, ''), string.PRE_STRCASE)
+		);
+
+		super.value = keys.join(' + ');
+	}
+
+	get value()
+	{
+		return this.inner;
+	}
+}
+
 class ErrorView extends ViewController
 {
 	constructor()
@@ -3062,6 +3289,12 @@ class UIDocument extends UIElement
 		document.addEventListener('fullscreenchange',
 			_ => this.setFullscreenState()
 		);
+	}
+
+	insertAppView(view)
+	{
+		this.querySelector(view.element.nodeName)?.remove();
+		this.appendChild(view);
 	}
 
 	handleMoveEvent(pointerMoveFn)
@@ -3099,36 +3332,56 @@ class UIDocument extends UIElement
 	}
 }
 
-class ActionKeyHandler
+class Shortcuts
 {
-	constructor()
+	constructor(commands)
 	{
-		addEventListener('keydown', this.onKeydown.bind(this), true);
+		this.interpret(commands);
+
+		window.addEventListener('keydown',
+			this.onKeydown.bind(this),
+		true);
+
+		notifications.addListener(this, 'commandEdit commandsDataChange');
+	}
+
+	onCommandEdit(bool)
+	{
+		this.isEditingCommand = bool;
+	}
+
+	onCommandsDataChange({newValue})
+	{
+		this.interpret(newValue);
 	}
 
 	onKeydown(e)
 	{
-		const key = e.code;
+		const shortcut = this.map[e.code];
 
-		if (!e.shiftKey && (e.ctrlKey + e.altKey + e.metaKey) == 1)
+		if (shortcut && !this.isEditingCommand)
 		{
-			if (key == 'KeyS' || key == 'KeyE' && yt.isWatchPage) {
-				return e.preventDefault() & this.notification(key);
+			for (const ctrl of shortcut.keys) {
+				if (!e[ctrl]) return;
 			}
 
-			if (key == 'KeyX' && dom.isFullscreen) {
-				return this.notification('Escape');
-			}
-		}
-
-		if (key == 'Escape') {
-			return this.notification(key);
+			e.preventDefault() &
+				notifications.send('command', shortcut.command);
 		}
 	}
 
-	notification(code)
+	interpret(commands)
 	{
-		notifications.send('actionKeyPress', code);
+		this.map = {};
+
+		for (let [command, keys] of entries(commands))
+		{
+			keys = clone(keys);
+
+			if (keys.length) {
+				this.map[keys.pop()] = {keys, command};
+			}
+		}
 	}
 }
 
@@ -3170,19 +3423,20 @@ class App extends Main
 		string.split('error unhandledrejection').forEach(
 			event => addEventListener(event, this.onUncaughtError.bind(this))
 		);
-
-		new ActionKeyHandler;
 	}
 
 	onReady()
 	{
-		this.sendMessage({clientLoad:true}).then(html => {
+		this.sendMessage({clientLoad:true}).then(html =>
+		{
 			self.UI = new UIFactory(html);
 			self.dom = new UIDocument;
 			self.appController = new AppController;
+
+			dom.insertAppView(appController.view);
 		});
 
-		document.querySelector('cs-app')?.remove();
+		new Shortcuts(mem.commands);
 	}
 
 	authUser(apiKey)
