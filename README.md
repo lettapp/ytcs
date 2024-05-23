@@ -1,6 +1,6 @@
 # Comments Search for Youtube
 Comments Search for Youtube allows you to search youtube comments without leaving the site.  
-Simply hit `Ctrl-S / Alt-S` or click the extension icon to search.
+Simply hit `Ctrl-S` or click the extension icon to search.
 
 ![Comments Search for Youtube Extension Screenshot][screenshot]
 

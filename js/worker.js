@@ -1,6 +1,8 @@
 /*
  * This code is part of Comments Search for Youtube chrome extension
- * 
+ *
+ * LettApp lett.app/ytcs
+ * GitHub  @lettapp
  */
 'use strict';
 
@@ -225,6 +227,10 @@ class string
 
 class array
 {
+	static MAP_MODE_SKIP = 1;
+	static MAP_MODE_STOP = 2;
+	static MAP_MODE_FAIL = 3;
+
 	static cast(x)
 	{
 		return is.array(x) ? x : [x];
@@ -336,10 +342,6 @@ class array
 
 		return items;
 	}
-
-	static MAP_MODE_SKIP = 1;
-	static MAP_MODE_STOP = 2;
-	static MAP_MODE_FAIL = 3;
 }
 
 class object
@@ -647,7 +649,7 @@ class ext
 {
 	static isCachable(n)
 	{
-		return 0 < n && n < this.CACHE_MAX;
+		return 0 < n && n < 1e3;
 	}
 
 	static isCached(videoId, ttl)
@@ -665,8 +667,6 @@ class ext
 			auth:'/html/svg/auth.svg',
 		}
 	}, chrome.runtime.getURL);
-
-	static CACHE_MAX = 1000;
 }
 
 class notifications
@@ -698,6 +698,11 @@ class notifications
 		for (const target of this.getChannel(id)) {
 			target[on(id)](data);
 		}
+	}
+
+	static contextInvalidated()
+	{
+		this.send('contextInvalidated') & (this.channels = {});
 	}
 
 	static getChannel(id)
@@ -806,13 +811,14 @@ class AppStorage extends Storage
 		);
 	}
 
-	upgrade(curr)
+	upgrade(storage)
 	{
-		const ver = chrome.runtime.getManifest().version;
+		const newVer = chrome.runtime.getManifest().version;
+		const oldVer = storage.ver;
 
-		if (ver != curr.ver)
+		if (oldVer != newVer)
 		{
-			let upgraded = assign({
+			const upgraded = assign({
 				cache:{},
 				user:{},
 				pos:{},
@@ -820,13 +826,13 @@ class AppStorage extends Storage
 				commands: {
 					start:['ctrlKey', 'KeyS'],
 					close:['Escape'],
-					fsClose:['shiftKey', 'KeyX'],
-					tsSearch:['shiftKey', 'KeyT'],
+					fsClose:[],
+					tsSearch:[],
 				}
-			}, curr);
+			}, storage);
 
 			this.persist(
-				assign(curr, upgraded, {ver})
+				assign(storage, upgraded, {ver:newVer})
 			);
 		}
 	}
@@ -1824,7 +1830,7 @@ class YoutubeCommonApi
 			fromCache = ext.isCached(params.videoId),
 			opts = {},
 			items = [],
-			i = Math.ceil(ext.CACHE_MAX / 100);
+			i = 10;
 
 		if (fromCache) {
 			opts = {cache:'force-cache'};

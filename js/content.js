@@ -1,6 +1,8 @@
 /*
  * This code is part of Comments Search for Youtube chrome extension
- * 
+ *
+ * LettApp lett.app/ytcs
+ * GitHub  @lettapp
  */
 'use strict';
 
@@ -225,6 +227,10 @@ class string
 
 class array
 {
+	static MAP_MODE_SKIP = 1;
+	static MAP_MODE_STOP = 2;
+	static MAP_MODE_FAIL = 3;
+
 	static cast(x)
 	{
 		return is.array(x) ? x : [x];
@@ -336,10 +342,6 @@ class array
 
 		return items;
 	}
-
-	static MAP_MODE_SKIP = 1;
-	static MAP_MODE_STOP = 2;
-	static MAP_MODE_FAIL = 3;
 }
 
 class object
@@ -647,7 +649,7 @@ class ext
 {
 	static isCachable(n)
 	{
-		return 0 < n && n < this.CACHE_MAX;
+		return 0 < n && n < 1e3;
 	}
 
 	static isCached(videoId, ttl)
@@ -665,8 +667,6 @@ class ext
 			auth:'/html/svg/auth.svg',
 		}
 	}, chrome.runtime.getURL);
-
-	static CACHE_MAX = 1000;
 }
 
 class notifications
@@ -698,6 +698,11 @@ class notifications
 		for (const target of this.getChannel(id)) {
 			target[on(id)](data);
 		}
+	}
+
+	static contextInvalidated()
+	{
+		this.send('contextInvalidated') & (this.channels = {});
 	}
 
 	static getChannel(id)
@@ -806,13 +811,14 @@ class AppStorage extends Storage
 		);
 	}
 
-	upgrade(curr)
+	upgrade(storage)
 	{
-		const ver = chrome.runtime.getManifest().version;
+		const newVer = chrome.runtime.getManifest().version;
+		const oldVer = storage.ver;
 
-		if (ver != curr.ver)
+		if (oldVer != newVer)
 		{
-			let upgraded = assign({
+			const upgraded = assign({
 				cache:{},
 				user:{},
 				pos:{},
@@ -820,13 +826,13 @@ class AppStorage extends Storage
 				commands: {
 					start:['ctrlKey', 'KeyS'],
 					close:['Escape'],
-					fsClose:['shiftKey', 'KeyX'],
-					tsSearch:['shiftKey', 'KeyT'],
+					fsClose:[],
+					tsSearch:[],
 				}
-			}, curr);
+			}, storage);
 
 			this.persist(
-				assign(curr, upgraded, {ver})
+				assign(storage, upgraded, {ver:newVer})
 			);
 		}
 	}
@@ -1002,6 +1008,58 @@ class Main
 				);
 			}
 		}
+	}
+}
+
+class Events
+{
+	constructor()
+	{
+		this.calls = [];
+
+		notifications.addListener(this, 'contextInvalidated');
+	}
+
+	addListener(typeScope, listener, options)
+	{
+		const [type, scope] = unpack(typeScope);
+
+		scope.addEventListener(type, listener, options);
+
+		this.add(
+			[scope, type, listener, options]
+		);
+	}
+
+	removeListener(typeScope)
+	{
+		const [type, scope] = unpack(typeScope);
+
+		this.iterator.forEach(
+			call => call[0] == scope && call[1] == type && this.remove(call)
+		);
+	}
+
+	onContextInvalidated()
+	{
+		this.iterator.forEach(
+			call => this.remove(call)
+		);
+	}
+
+	add(call)
+	{
+		this.calls.push(call);
+	}
+
+	remove(call)
+	{
+		array.remove(call, this.calls).shift().removeEventListener(...call);
+	}
+
+	get iterator()
+	{
+		return clone(this.calls);
 	}
 }
 
@@ -2170,6 +2228,8 @@ class AppController extends NavViewController
 		else {
 			this.onAuthRequired();
 		}
+
+		this.observeContext(view);
 	}
 
 	modelDidSet()
@@ -2265,9 +2325,22 @@ class AppController extends NavViewController
 		}
 	}
 
-	onContextInvalidated()
+	observeContext(view)
 	{
-		this.addChild(new ErrorView);
+		const observer = new MutationObserver(
+			_ => app.contextInvalidated && this.onContextInvalidated(true)
+		);
+
+		observer.observe(view.element, {attributes:true});
+	}
+
+	onContextInvalidated(isReload)
+	{
+		if (!isReload) {
+			return this.addChild(new ErrorView);
+		}
+
+		this.view.remove() & notifications.contextInvalidated();
 	}
 }
 
@@ -3084,7 +3157,7 @@ class CommandsView extends ViewController
 		},{
 			name:'fsClose',
 			title:'Close while in fullscreen',
-			reject:{Escape:'Esc key is reserved in fullscreen'},
+			reject:{Escape:'Escape is reserved in fullscreen'},
 			value:commands.fsClose,
 		},{
 			name:'tsSearch',
@@ -3204,16 +3277,14 @@ class UICommandInput extends UIInput
 	{
 		e.preventDefault();
 
-		if (!e.repeat) {
-			this.evaluate(e, e.key, e.code);
-		}
+		this.evaluate(e, e.key, e.code);
 	}
 
 	evaluate(e, key, code)
 	{
 		let keys = [];
 
-		if (['Ctrl', 'Shift', 'Alt', 'Meta'].includes(key)) {
+		if (['Control', 'Alt', 'Meta', 'Shift'].includes(key)) {
 			return;
 		}
 
@@ -3227,10 +3298,10 @@ class UICommandInput extends UIInput
 
 		if (!this.accept[code])
 		{
-			keys = ['ctrlKey', 'altKey', 'shiftKey', 'metaKey'].filter(k => e[k]);
+			keys = ['ctrlKey', 'metaKey', 'altKey', 'shiftKey'].filter(k => e[k]);
 
-			if (!keys.length) {
-				return this.error('Use Ctrl-Alt-Shift-Meta keys');
+			if (keys.length == 0) {
+				return this.error('Use Ctrl-Alt-Meta-Shift keys');
 			}
 		}
 
@@ -3286,14 +3357,19 @@ class UIDocument extends UIElement
 			this.setDarkModeState(true);
 		}
 
-		document.addEventListener('fullscreenchange',
+		events.addListener({fullscreenchange:document},
 			_ => this.setFullscreenState()
 		);
 	}
 
 	insertAppView(view)
 	{
-		this.querySelector(view.element.nodeName)?.remove();
+		const prev = this.querySelector(view.element.nodeName);
+
+		if (prev) {
+			prev.setAttribute('reloaded', true) & prev.remove();
+		}
+
 		this.appendChild(view);
 	}
 
@@ -3338,16 +3414,40 @@ class Shortcuts
 	{
 		this.interpret(commands);
 
-		window.addEventListener('keydown',
-			this.onKeydown.bind(this),
-		true);
+		this.setListenerState(true);
 
-		notifications.addListener(this, 'commandEdit commandsDataChange');
+		notifications.addListener(this,
+			'commandEdit commandsDataChange'
+		);
+	}
+
+	onKeydown(e)
+	{
+		const {mods, command} = this.map[e.code] || {};
+
+		if (!command) {
+			return;
+		}
+
+		for (const mod of mods) {
+			if (!e[mod]) return;
+		}
+
+		if (command == 'tsSearch' && !yt.isWatchPage) {
+			return;
+		}
+
+		if (command == 'fsClose' && !dom.isFullscreen) {
+			return;
+		}
+
+		e.preventDefault() &
+			notifications.send('command', command);
 	}
 
 	onCommandEdit(bool)
 	{
-		this.isEditingCommand = bool;
+		this.setListenerState(!bool);
 	}
 
 	onCommandsDataChange({newValue})
@@ -3355,18 +3455,15 @@ class Shortcuts
 		this.interpret(newValue);
 	}
 
-	onKeydown(e)
+	setListenerState(bool)
 	{
-		const shortcut = this.map[e.code];
-
-		if (shortcut && !this.isEditingCommand)
-		{
-			for (const ctrl of shortcut.keys) {
-				if (!e[ctrl]) return;
-			}
-
-			e.preventDefault() &
-				notifications.send('command', shortcut.command);
+		if (bool) {
+			events.addListener({keydown:window},
+				e => !e.repeat && this.onKeydown(e), true
+			);
+		}
+		else {
+			events.removeListener({keydown:window});
 		}
 	}
 
@@ -3374,13 +3471,18 @@ class Shortcuts
 	{
 		this.map = {};
 
-		for (let [command, keys] of entries(commands))
+		for (const [command, keys] of entries(commands))
 		{
-			keys = clone(keys);
-
-			if (keys.length) {
-				this.map[keys.pop()] = {keys, command};
+			if (keys.length == 0) {
+				continue;
 			}
+
+			const [key, mods] = [
+				keys.slice(-1)[0],
+				keys.slice(0, -1),
+			];
+
+			this.map[key] = {mods, command};
 		}
 	}
 }
@@ -3427,6 +3529,8 @@ class App extends Main
 
 	onReady()
 	{
+		self.events = new Events;
+
 		this.sendMessage({clientLoad:true}).then(html =>
 		{
 			self.UI = new UIFactory(html);
@@ -3449,16 +3553,16 @@ class App extends Main
 		appController.start();
 	}
 
-	onUncaughtError(e)
+	get contextInvalidated()
 	{
-		if (!chrome.runtime?.id) {
-			e.preventDefault() & this.onContextInvalidated();
-		}
+		return !chrome.runtime?.id;
 	}
 
-	onContextInvalidated()
+	onUncaughtError(e)
 	{
-		notifications.send('contextInvalidated');
+		if (this.contextInvalidated) {
+			e.preventDefault() & notifications.contextInvalidated();
+		}
 	}
 }
 
