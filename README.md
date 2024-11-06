@@ -14,7 +14,7 @@ You can install it directly from the [Chrome Web Store][cws] or manually using t
 * Youtube Data API Key
 
 #### Permissions
-All extension permissions can be found in [manifest.json][manifest]
+All extension permissions can be found in [/manifest.json][manifest]
 
 [cws]: https://chromewebstore.google.com/detail/comments-search-for-youtu/fbbhnhgdgjbfnkoiiedglmlnmleefjga "Comments Search for Youtube on Chrome Web Store"
 [screenshot]: /assets/screenshot.webp "Comments Search for Youtube Screenshot"

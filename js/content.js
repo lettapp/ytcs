@@ -100,6 +100,11 @@ class string
 	static PRE_STRCASE = 1;
 	static PRE_NEWLINE = 1;
 
+	static split(str, d = ' ')
+	{
+		return str ? str.split(d) : [];
+	}
+
 	static match(ptrn, str)
 	{
 		return str.match(ptrn) || [];
@@ -161,11 +166,6 @@ class string
 	static tokenCount(str)
 	{
 		return this.count(/\s/g, str) + 1;
-	}
-
-	static split(str, d = ' ')
-	{
-		return str ? str.split(d) : [];
 	}
 
 	static tokenSplit(str, tokens)
@@ -693,16 +693,20 @@ class notifications
 		}
 	}
 
-	static send(id, data)
+	static send(pack)
 	{
+		const [id, data] = unpack(pack);
+
 		for (const target of this.getChannel(id)) {
 			target[on(id)](data);
 		}
 	}
 
-	static contextInvalidated()
+	static contextInvalidated(isUncaught)
 	{
-		this.send('contextInvalidated') & (this.channels = {});
+		this.send({contextInvalidated:isUncaught});
+
+		this.channels = {};
 	}
 
 	static getChannel(id)
@@ -726,7 +730,7 @@ class Storage
 		clearTimeout(this.commitId);
 
 		this.commitId = setTimeout(
-			_ => this.persist(this.items), 10
+			_ => this.persist(this.items)
 		);
 
 		return this.items[k];
@@ -802,13 +806,13 @@ class AppStorage extends Storage
 		}
 	}
 
-	handleChange(k, change)
+	handleChange(k, {newValue})
 	{
-		this.items[k] = change.newValue;
+		this.items[k] = newValue;
 
-		notifications.send(
-			string.format('%sDataChange', k), change
-		);
+		notifications.send({
+			[string.format('%sDataChange', k)]:newValue
+		});
 	}
 
 	upgrade(storage)
@@ -822,6 +826,7 @@ class AppStorage extends Storage
 				cache:{},
 				user:{},
 				pos:{},
+				updates:[],
 				installed:time.now(),
 				commands: {
 					start:['ctrlKey', 'KeyS'],
@@ -962,6 +967,7 @@ class Main
 			onMessage: chrome.runtime.onMessage,
 			onConnect: chrome.runtime.onConnect,
 			onClicked: chrome.action?.onClicked,
+			onAlarmed: chrome.alarms?.onAlarm,
 			onInstall: {
 				addListener: addEventListener.bind(null, 'install')
 			}
@@ -1108,14 +1114,7 @@ class UIFactory
 
 		for (const proto of this.convert(html).children)
 		{
-			const id = proto.getAttribute('protoid');
-
-			if (id) {
-				proto.removeAttribute('protoid');
-			}
-			else {
-				throw proto;
-			}
+			const id = proto.attributes.removeNamedItem('protoid').value;
 
 			this.protos[id] = proto.outerHTML;
 		}
@@ -1186,7 +1185,7 @@ class UIElement extends UIResponder
 
 		this.element = element;
 
-		this.import('style hidden remove textContent querySelector querySelectorAll addEventListener');
+		this.import('style dataset hidden remove textContent querySelector querySelectorAll addEventListener');
 	}
 
 	appendChild(child)
@@ -2328,19 +2327,19 @@ class AppController extends NavViewController
 	observeContext(view)
 	{
 		const observer = new MutationObserver(
-			_ => app.contextInvalidated && this.onContextInvalidated(true)
+			_ => app.contextInvalidated && notifications.contextInvalidated()
 		);
 
 		observer.observe(view.element, {attributes:true});
 	}
 
-	onContextInvalidated(isReload)
+	onContextInvalidated(isUncaught)
 	{
-		if (!isReload) {
+		if (isUncaught) {
 			return this.addChild(new ErrorView);
 		}
 
-		this.view.remove() & notifications.contextInvalidated();
+		this.view.remove();
 	}
 }
 
@@ -2359,7 +2358,7 @@ class AppModel
 
 		(css.left + css.width > 100) && (css.left = 100 - css.width);
 
-		mem.set({pos:css});
+		mem.pos = css;
 	}
 }
 
@@ -2389,12 +2388,12 @@ class AuthView extends NavViewController
 
 	onAuth()
 	{
-		notifications.send('userDidAuth');
+		notifications.send({userDidAuth:null});
 	}
 
 	onTrial()
 	{
-		notifications.send('userTrialRequest');
+		notifications.send({userTrialRequest:null});
 	}
 }
 
@@ -2507,9 +2506,16 @@ class SearchView extends ViewController
 			superview:[view, 'header']
 		});
 
+		this.updatesIcon = new UIButton({
+			styles:'CSNavButton CSBellIcon CSMayAppear',
+			image:'UIIconBell',
+			target:[this, 'onClick:showUpdatesView'],
+			superview:[view, 'header']
+		});
+
 		this.commentCounter = new UIButton({
 			styles:'CSCommentCount',
-			label:'0',
+			text:'0',
 			state:'disabled',
 			target:[this, 'onClick:showFeaturesView'],
 			superview:[view, 'header']
@@ -2530,9 +2536,18 @@ class SearchView extends ViewController
 
 	viewWillAppear()
 	{
+		const updates = mem.updates.some(item => item.read == false);
+
 		interval.setImmediate(
 			_ => this.auditContext(), this.didAuth ? 250 : 2e8
 		);
+
+		if (updates) {
+			setTimeout(_ => this.updatesIcon.addClass('CSAppear'), 1e3);
+		}
+		else {
+			setTimeout(_ => this.updatesIcon.delClass('CSAppear'), 300);
+		}
 	}
 
 	viewDidAppear(sender)
@@ -2609,6 +2624,11 @@ class SearchView extends ViewController
 	showFeaturesView()
 	{
 		this.present(new FeaturesView);
+	}
+
+	showUpdatesView()
+	{
+		this.present(new UpdatesView);
 	}
 
 	showCommandsView()
@@ -3139,6 +3159,58 @@ class FeaturesView extends ViewController
 	}
 }
 
+class UpdatesView extends ViewController
+{
+	constructor()
+	{
+		super(
+			new UIUpdatesView(mem.updates)
+		);
+	}
+
+	onDataMutation()
+	{
+		mem.updates;
+	}
+}
+
+class UIUpdatesView extends UIView
+{
+	constructor(items)
+	{
+		super({source:'UIUpdatesView', items});
+	}
+
+	didInit({items})
+	{
+		for (const item of items)
+		{
+			this.addSubview(
+				new UIUpdate(item)
+			);
+		}
+	}
+}
+
+class UIUpdate extends UIView
+{
+	constructor(item)
+	{
+		super({
+			source:'UIUpdate',
+			events:'click',
+			data:item,
+		});
+	}
+
+	onClick()
+	{
+		this.data.read = this.dataset.read = true;
+
+		this.handleAction('onDataMutation');
+	}
+}
+
 class CommandsView extends ViewController
 {
 	constructor()
@@ -3177,7 +3249,7 @@ class CommandsView extends ViewController
 
 	onEditState(_, newState)
 	{
-		notifications.send('commandEdit', newState);
+		notifications.send({commandEdit:newState});
 	}
 }
 
@@ -3325,7 +3397,7 @@ class UICommandInput extends UIInput
 		this.inner = keys;
 
 		keys = keys.map(
-			s => string.capitalize(s.replace(/key|digit/i, ''), string.PRE_STRCASE)
+			s => string.capitalize(s.replace(/Key|Digit/, ''), string.PRE_STRCASE)
 		);
 
 		super.value = keys.join(' + ');
@@ -3442,7 +3514,7 @@ class Shortcuts
 		}
 
 		e.preventDefault() &
-			notifications.send('command', command);
+			notifications.send({command});
 	}
 
 	onCommandEdit(bool)
@@ -3450,7 +3522,7 @@ class Shortcuts
 		this.setListenerState(!bool);
 	}
 
-	onCommandsDataChange({newValue})
+	onCommandsDataChange(newValue)
 	{
 		this.interpret(newValue);
 	}
@@ -3458,9 +3530,7 @@ class Shortcuts
 	setListenerState(bool)
 	{
 		if (bool) {
-			events.addListener({keydown:window},
-				e => !e.repeat && this.onKeydown(e), true
-			);
+			events.addListener({keydown:window}, this.onKeydown.bind(this), true);
 		}
 		else {
 			events.removeListener({keydown:window});
@@ -3561,7 +3631,7 @@ class App extends Main
 	onUncaughtError(e)
 	{
 		if (this.contextInvalidated) {
-			e.preventDefault() & notifications.contextInvalidated();
+			e.preventDefault() & notifications.contextInvalidated(true);
 		}
 	}
 }

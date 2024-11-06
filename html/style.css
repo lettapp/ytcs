@@ -100,7 +100,7 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp input:not(:focus)::placeholder {
 	opacity:1;
-	transition:opacity 150ms ease-in;
+	transition:opacity 150ms ease-in 100ms;
 }
 #CSApp input:focus::placeholder {
 	opacity:0;
@@ -368,6 +368,7 @@ html:not([dark]):not([fullscreen]) {
 #CSApp .CSTrim {
 	-webkit-box-orient:vertical;
 	-webkit-line-clamp:2;
+	line-clamp:2;
 	word-break:break-word;
 }
 #CSApp .CSCommentHeader {
@@ -654,4 +655,34 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp .CSCommand error:not(:empty) ~ input {
 	border-bottom-color:var(--cs-error-color);
+}
+#CSApp .CSUpdatesView h1 {
+	display:flex;
+    height:50px;
+    align-items:center;
+    justify-content:center;
+    padding-top: 7px;
+}
+#CSApp .CSUpdate {
+	padding:12px 20px;
+	border-left:2px solid transparent;
+	transition:border-color 200ms;
+}
+#CSApp .CSUpdate:hover {
+	background-color:var(--cs-border-color);
+}
+#CSApp .CSUpdate[data-read="false"] {
+	border-left-color:var(--cs-link-color);
+}
+#CSApp .CSBellIcon {
+	width:24px;
+	height:24px;
+	margin:0 8px;
+}
+#CSApp .CSMayAppear {
+	transform:scale(0);
+	transition:transform 300ms;
+}
+#CSApp .CSAppear {
+	transform:scale(1);
 }

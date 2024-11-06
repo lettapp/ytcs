@@ -100,6 +100,11 @@ class string
 	static PRE_STRCASE = 1;
 	static PRE_NEWLINE = 1;
 
+	static split(str, d = ' ')
+	{
+		return str ? str.split(d) : [];
+	}
+
 	static match(ptrn, str)
 	{
 		return str.match(ptrn) || [];
@@ -161,11 +166,6 @@ class string
 	static tokenCount(str)
 	{
 		return this.count(/\s/g, str) + 1;
-	}
-
-	static split(str, d = ' ')
-	{
-		return str ? str.split(d) : [];
 	}
 
 	static tokenSplit(str, tokens)
@@ -693,16 +693,20 @@ class notifications
 		}
 	}
 
-	static send(id, data)
+	static send(pack)
 	{
+		const [id, data] = unpack(pack);
+
 		for (const target of this.getChannel(id)) {
 			target[on(id)](data);
 		}
 	}
 
-	static contextInvalidated()
+	static contextInvalidated(isUncaught)
 	{
-		this.send('contextInvalidated') & (this.channels = {});
+		this.send({contextInvalidated:isUncaught});
+
+		this.channels = {};
 	}
 
 	static getChannel(id)
@@ -726,7 +730,7 @@ class Storage
 		clearTimeout(this.commitId);
 
 		this.commitId = setTimeout(
-			_ => this.persist(this.items), 10
+			_ => this.persist(this.items)
 		);
 
 		return this.items[k];
@@ -802,13 +806,13 @@ class AppStorage extends Storage
 		}
 	}
 
-	handleChange(k, change)
+	handleChange(k, {newValue})
 	{
-		this.items[k] = change.newValue;
+		this.items[k] = newValue;
 
-		notifications.send(
-			string.format('%sDataChange', k), change
-		);
+		notifications.send({
+			[string.format('%sDataChange', k)]:newValue
+		});
 	}
 
 	upgrade(storage)
@@ -822,6 +826,7 @@ class AppStorage extends Storage
 				cache:{},
 				user:{},
 				pos:{},
+				updates:[],
 				installed:time.now(),
 				commands: {
 					start:['ctrlKey', 'KeyS'],
@@ -962,6 +967,7 @@ class Main
 			onMessage: chrome.runtime.onMessage,
 			onConnect: chrome.runtime.onConnect,
 			onClicked: chrome.action?.onClicked,
+			onAlarmed: chrome.alarms?.onAlarm,
 			onInstall: {
 				addListener: addEventListener.bind(null, 'install')
 			}
@@ -2025,6 +2031,11 @@ class AppLettApi
 	auth(key)
 	{
 		return this.get('/auth', {key});
+	}
+
+	updates(since)
+	{
+		return this.get('/updates', {since});
 	}
 
 	async get(endpoint, params, opts)
@@ -3115,6 +3126,14 @@ class App extends Main
 	onInstall()
 	{
 		tabs.execContentScript();
+		this.setAlarms();
+	}
+
+	onAlarmed({name})
+	{
+		if (name == 'updatesCheck') {
+			return this.onUpdatesCheck();
+		}
 	}
 
 	onClientLoad(data, tab, callback)
@@ -3139,6 +3158,29 @@ class App extends Main
 		}
 
 		callback(r.error);
+	}
+
+	setAlarms()
+	{
+		chrome.alarms.create('updatesCheck', {periodInMinutes:1440});
+	}
+
+	onUpdatesCheck()
+	{
+		const since = mem.updates.find(x => x.origin == 'dev')?.time ?? 0;
+
+		api.lett.app.updates(since).then(
+			r => this.addUpdates(r.data?.items ?? [])
+		);
+	}
+
+	addUpdates(items)
+	{
+		items.forEach(item => item.read = false);
+
+		mem.updates.push(...items) & mem.updates.sort(
+			(a, b) => b.time - a.time
+		);
 	}
 }
 

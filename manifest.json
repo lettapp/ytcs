@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "version": "24.05.23",
+    "version": "24.11.6",
     "minimum_chrome_version": "100",
     "name": "Comments Search for Youtube",
     "description": "Search youtube comments by keywords.",
@@ -10,7 +10,8 @@
     },
     "permissions": [
         "storage",
-        "scripting"
+        "scripting",
+        "alarms"
     ],
     "host_permissions": [
         "https://www.youtube.com/*"
