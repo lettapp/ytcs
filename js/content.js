@@ -619,32 +619,6 @@ class sort
 	}
 }
 
-class interval
-{
-	static set(fn, ms, immediate)
-	{
-		this.clear(fn);
-
-		if (immediate) {
-			fn();
-		}
-
-		this.id[fn] = setInterval(fn, ms);
-	}
-
-	static setImmediate(fn, ms)
-	{
-		this.set(fn, ms, true);
-	}
-
-	static clear(fn)
-	{
-		clearInterval(this.id[fn]);
-	}
-
-	static id = {};
-}
-
 class ext
 {
 	static isCachable(n)
@@ -1318,16 +1292,16 @@ class UIView extends UIElement
 			this.textContent = init.text;
 		}
 
+		this.didInit(init);
+	}
+
+	didInit(init)
+	{
 		if (init.superview)
 		{
 			const [view, targetId] = init.superview;
 			view.addSubview(this, targetId);
 		}
-
-		this.didInit(init);
-	}
-
-	didInit(init) {
 	}
 
 	addSubview(view, targetId)
@@ -1524,6 +1498,8 @@ class UIWindow extends UIView
 		string.split('w e n ne nw we').forEach(
 			p => this.addSubview(new UIResizeBar(p))
 		);
+
+		super.didInit(init);
 	}
 
 	setPosition(props)
@@ -1739,6 +1715,8 @@ class UIImage extends UIView
 	didInit(init)
 	{
 		this.fallbackUrl = init.fallbackUrl;
+
+		super.didInit(init);
 	}
 
 	onError()
@@ -1770,6 +1748,8 @@ class UIInput extends UIView
 	didInit(init)
 	{
 		this.value = init.value ?? '';
+
+		super.didInit(init);
 	}
 
 	get value()
@@ -1840,7 +1820,7 @@ class UIProgressInput extends UIView
 			superview:[this]
 		});
 
-		this.setState('normal');
+		super.didInit(init);
 	}
 
 	get value()
@@ -1893,33 +1873,9 @@ class UIControl extends UIView
 {
 	constructor(init)
 	{
-		super(init);
-	}
-
-	didInit(init)
-	{
-		this.setState(init.state || 'normal');
-	}
-
-	setState(state)
-	{
-		this.state = state;
-
-		this.setAttribute('state', state);
-	}
-
-	get isSelected()
-	{
-		return this.state == 'selected';
-	}
-}
-
-class UIButton extends UIControl
-{
-	constructor(init)
-	{
 		UI.extend(init, {
-			events:'click'
+			import:'disabled',
+			events:'click',
 		});
 
 		super(init);
@@ -1927,22 +1883,30 @@ class UIButton extends UIControl
 
 	didInit(init)
 	{
-		super.didInit(init);
-
-		if (init.label) {
-			this.setLabel(init.label);
+		if (init.state) {
+			this[init.state] = true;
 		}
 
+		super.didInit(init);
+	}
+}
+
+class UIButton extends UIControl
+{
+	constructor(init)
+	{
+		init.source ??= document.createElement('button');
+
+		super(init);
+	}
+
+	didInit(init)
+	{
 		if (init.image) {
 			this.addImage(init.image);
 		}
 
-		this.value = init.value;
-	}
-
-	setLabel(text)
-	{
-		this.textContent = text;
+		super.didInit(init);
 	}
 
 	addImage(protoId)
@@ -2189,9 +2153,7 @@ class NavViewController extends ViewController
 
 	setBackButtonVisibility()
 	{
-		this.backBtn.setState(
-			this.childCount > 1 ? 'normal' : 'hidden'
-		);
+		this.backBtn.hidden = this.childCount < 2;
 	}
 }
 
@@ -2404,6 +2366,8 @@ class AuthMainView extends ViewController
 		super(
 			new UIView({source:'UIAuthView'})
 		);
+
+		notifications.addListener(this,	'userDataChange');
 	}
 
 	viewDidSet(view)
@@ -2436,14 +2400,16 @@ class AuthMainView extends ViewController
 	{
 		sender.setState('loading');
 
-		app.authUser(sender.value).then(err =>
-		{
-			if (err) {
-				return sender.setState('error', err);
-			}
+		app.authUser(sender.value).then(
+			err => err && sender.setState('error', err)
+		);
+	}
 
+	onUserDataChange(user)
+	{
+		if (user.key) {
 			this.handleAction('onAuth');
-		});
+		}
 	}
 }
 
@@ -2466,13 +2432,13 @@ class AuthHelpView extends ViewController
 	{
 		const btn = new UIButton({
 			source:'UIProgressButton',
-			import:'children',
+			import:'firstElementChild',
 			data:{label:'Try it without key'},
 			target:[this, 'onClick:tryButtonClicked'],
 			superview:[view, 'actionBtns'],
 		});
 
-		btn.children[0].style.width = `${100 - view.data.usage}%`;
+		btn.firstElementChild.style.width = `${100 - view.data.usage}%`;
 	}
 
 	tryButtonClicked(btn)
@@ -2492,8 +2458,6 @@ class SearchView extends ViewController
 		super(
 			new UIView({source:'UISearchView'})
 		);
-
-		this.didAuth = !trialMode;
 
 		notifications.addListener(this, 'command');
 	}
@@ -2538,16 +2502,14 @@ class SearchView extends ViewController
 	{
 		const updates = mem.updates.some(item => item.read == false);
 
-		interval.setImmediate(
-			_ => this.auditContext(), this.didAuth ? 250 : 2e8
-		);
-
 		if (updates) {
 			setTimeout(_ => this.updatesIcon.addClass('CSAppear'), 1e3);
 		}
 		else {
 			setTimeout(_ => this.updatesIcon.delClass('CSAppear'), 300);
 		}
+
+		this.auditContext();
 	}
 
 	viewDidAppear(sender)
@@ -2557,10 +2519,6 @@ class SearchView extends ViewController
 
 	viewDidDisappear()
 	{
-		interval.clear(
-			_ => this.auditContext()
-		);
-
 		this.messageView.clear();
 		this.resultsView.pauseInlinePlayer();
 		this.input.blur();
@@ -2589,7 +2547,7 @@ class SearchView extends ViewController
 			return this.showCommandsView();
 		}
 
-		if (!yt.isWatchPage) {
+		if (!YT.isWatchPage) {
 			return this.messageView.showMessage('errNotWatchPage');
 		}
 
@@ -2609,7 +2567,7 @@ class SearchView extends ViewController
 
 	getAllComments()
 	{
-		if (!yt.isWatchPage) {
+		if (!YT.isWatchPage) {
 			return this.messageView.showMessage('errNotWatchPage');
 		}
 
@@ -2638,7 +2596,7 @@ class SearchView extends ViewController
 
 	auditContext()
 	{
-		const newId = this.videoDidChange;
+		const newId = (this.videoId != YT.videoId) && (this.videoId = YT.videoId);
 
 		if (newId)
 		{
@@ -2665,7 +2623,7 @@ class SearchView extends ViewController
 	searchCurrentTime()
 	{
 		this.autoSearch(
-			time.int2hms(yt.player.currentTime)
+			time.int2hms(YT.player.currentTime)
 		);
 	}
 
@@ -2684,11 +2642,6 @@ class SearchView extends ViewController
 
 		this.searchTerm(q);
 		this.execSearch(q);
-	}
-
-	get videoDidChange()
-	{
-		return (this.videoId != yt.videoId) && (this.videoId = yt.videoId);
 	}
 }
 
@@ -2850,14 +2803,14 @@ class UISearchResultsView extends UITableView
 		super(dataSource);
 	}
 
-	setVideoTime(sender)
-	{
-		yt.playerSetCurrentTime(sender.data.startAt);
-	}
-
-	embedVideo(sender)
+	onEmbedRequest()
 	{
 		return this.inlinePlayer ||= new UIEmbeddedPlayer;
+	}
+
+	setVideoTime(sender)
+	{
+		YT.playerSetCurrentTime(sender.data.startAt);
 	}
 
 	pauseInlinePlayer()
@@ -2903,125 +2856,6 @@ class UISearchResultsView extends UITableView
 	}
 }
 
-function SearchModelDelegate(self)
-{
-	return {
-		onCommentCount(n)
-		{
-			self.commentCounter.setLabel(match(n,
-				[CC_NON, 'zero'],
-				[CC_DIS, 'off'],
-				[CC_GLB, 'global'],
-				[n, n],
-			));
-
-			self.commentCounter.setState(
-				ext.isCachable(n) ? 'normal' : 'disabled'
-			);
-		},
-
-		onResults(count, p)
-		{
-			this.onCommentCount(p);
-
-			if (count) {
-				return self.resultsView.pushInitialBatch() & self.showView(self.resultsView);
-			}
-
-			if (p < 1) {
-				return self.messageView.showMessage(match(p,
-					[CC_NON, 'errZeroComments'],
-					[CC_DIS, 'commentsDisabled'],
-					[CC_GLB, 'emptyResponse'],
-				));
-			}
-
-			if (p < 150) {
-				const action = new UIAnchor({
-					text:string.format('%s comments', p),
-					target:[self, 'onClick:getAllComments']
-				});
-
-				return self.messageView.showCustomMessage('Nothing found in ', action);
-			}
-
-			self.messageView.showMessage('emptyResponse');
-		},
-
-		onError(errorId)
-		{
-			self.messageView.showMessage(errorId);
-		}
-	}
-}
-
-function SearchMessageDelegate(self)
-{
-	return {
-		messageDidSet()
-		{
-			self.showView(self.messageView);
-		}
-	}
-}
-
-class UIEmbeddedPlayer extends UIView
-{
-	constructor()
-	{
-		super({
-			source:'UIEmbeddedPlayer',
-			import:'src contentDocument',
-			events:'load',
-		});
-
-		this.player = document.createElement('video');
-	}
-
-	onLoad()
-	{
-		const doc = this.contentDocument;
-
-		object.safeSet(this, {
-			player:doc.querySelector('video')
-		});
-
-		object.safeSet(
-			doc.querySelector('.ytp-pause-overlay-container'), {hidden:true}
-		);
-	}
-
-	load(videoId, startAt)
-	{
-		if (videoId != this.videoId)
-		{
-			const p = {
-				start:startAt,
-				autoplay:1,
-				modestbranding:1,
-				iv_load_policy:3,
-			};
-
-			this.src = string.format(
-				'https://www.youtube.com/embed/%s?%s', [videoId, new URLSearchParams(p)]
-			);
-
-			this.videoId = videoId;
-		}
-		else {
-			this.player.currentTime = startAt;
-			this.player.play();
-		}
-
-		return this;
-	}
-
-	pause()
-	{
-		this.player.pause();
-	}
-}
-
 class UIComment extends UIView
 {
 	constructor(comment)
@@ -3057,6 +2891,8 @@ class UIComment extends UIView
 
 		this.renderImageView(comment);
 		this.renderTextView(comment);
+
+		super.didInit(init);
 	}
 
 	embedVideo(sender)
@@ -3064,7 +2900,7 @@ class UIComment extends UIView
 		const {videoId, startAt} = sender.data;
 
 		this.addSubview(
-			this.handleAction('embedVideo').load(videoId, startAt), 'main'
+			this.handleAction('onEmbedRequest').load(videoId, startAt), 'main'
 		);
 	}
 
@@ -3149,13 +2985,120 @@ class UIComment extends UIView
 	}
 }
 
-class FeaturesView extends ViewController
+class UIEmbeddedPlayer extends UIView
 {
 	constructor()
 	{
-		super(
-			new UIView({source:'UIFeaturesView'})
+		super({
+			source:'UIEmbeddedPlayer',
+			import:'src contentDocument',
+			events:'load',
+		});
+
+		this.player = document.createElement('video');
+	}
+
+	onLoad()
+	{
+		const doc = this.contentDocument;
+
+		object.safeSet(this, {
+			player:doc.querySelector('video')
+		});
+
+		object.safeSet(
+			doc.querySelector('.ytp-pause-overlay-container'), {hidden:true}
 		);
+	}
+
+	load(videoId, startAt)
+	{
+		if (videoId != this.videoId)
+		{
+			const p = {
+				start:startAt,
+				autoplay:1,
+				modestbranding:1,
+				iv_load_policy:3,
+			};
+
+			this.src = string.format(
+				'https://www.youtube.com/embed/%s?%s', [videoId, new URLSearchParams(p)]
+			);
+
+			this.videoId = videoId;
+		}
+		else {
+			this.player.currentTime = startAt;
+			this.player.play();
+		}
+
+		return this;
+	}
+
+	pause()
+	{
+		this.player.pause();
+	}
+}
+
+function SearchModelDelegate(self)
+{
+	return {
+		onCommentCount(n)
+		{
+			self.commentCounter.textContent = match(n,
+				[CC_NON, 'zero'],
+				[CC_DIS, 'off'],
+				[CC_GLB, 'global'],
+				[n, n],
+			);
+
+			self.commentCounter.disabled = !ext.isCachable(n);
+		},
+
+		onResults(count, p)
+		{
+			this.onCommentCount(p);
+
+			if (count) {
+				return self.resultsView.pushInitialBatch() & self.showView(self.resultsView);
+			}
+
+			if (p < 1) {
+				return self.messageView.showMessage(match(p,
+					[CC_NON, 'errZeroComments'],
+					[CC_DIS, 'commentsDisabled'],
+					[CC_GLB, 'emptyResponse'],
+				));
+			}
+
+			if (p < 150) {
+				const action = new UIAnchor({
+					text:string.format('%s comments', p),
+					target:[self, 'onClick:getAllComments']
+				});
+
+				return self.messageView.showCustomMessage('Nothing found in ', action);
+			}
+
+			self.messageView.showMessage('emptyResponse');
+		},
+
+		onError(errorId)
+		{
+			self.messageView.showMessage(errorId);
+		}
+	}
+}
+
+function SearchMessageDelegate(self)
+{
+	return {
+		messageDidSet()
+		{
+			self.showView(self.messageView);
+		}
 	}
 }
 
@@ -3181,14 +3124,16 @@ class UIUpdatesView extends UIView
 		super({source:'UIUpdatesView', items});
 	}
 
-	didInit({items})
+	didInit(init)
 	{
-		for (const item of items)
+		for (const item of init.items)
 		{
 			this.addSubview(
 				new UIUpdate(item)
 			);
 		}
+
+		super.didInit(init);
 	}
 }
 
@@ -3260,14 +3205,16 @@ class UICommandsView extends UIView
 		super({source:'UICommandsView', items});
 	}
 
-	didInit({items})
+	didInit(init)
 	{
-		for (const item of items)
+		for (const item of init.items)
 		{
 			this.addSubview(
 				new UICommand(item)
 			);
 		}
+
+		super.didInit(init);
 	}
 
 	onCommandChange({name}, keys)
@@ -3301,13 +3248,15 @@ class UICommand extends UIView
 		super({source:'UICommand', data:item});
 	}
 
-	didInit({data})
+	didInit(init)
 	{
 		this.addSubview(
-			this.input = new UICommandInput(data), 'commandInput'
+			this.input = new UICommandInput(init.data), 'commandInput'
 		);
 
 		this.error = this.querySelector('error');
+
+		super.didInit(init);
 	}
 
 	onError(sender, message)
@@ -3409,6 +3358,16 @@ class UICommandInput extends UIInput
 	}
 }
 
+class FeaturesView extends ViewController
+{
+	constructor()
+	{
+		super(
+			new UIView({source:'UIFeaturesView'})
+		);
+	}
+}
+
 class ErrorView extends ViewController
 {
 	constructor()
@@ -3505,7 +3464,7 @@ class Shortcuts
 			if (!e[mod]) return;
 		}
 
-		if (command == 'tsSearch' && !yt.isWatchPage) {
+		if (command == 'tsSearch' && !YT.isWatchPage) {
 			return;
 		}
 
@@ -3557,7 +3516,7 @@ class Shortcuts
 	}
 }
 
-class yt
+class YT
 {
 	static get isWatchPage()
 	{

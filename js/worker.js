@@ -619,32 +619,6 @@ class sort
 	}
 }
 
-class interval
-{
-	static set(fn, ms, immediate)
-	{
-		this.clear(fn);
-
-		if (immediate) {
-			fn();
-		}
-
-		this.id[fn] = setInterval(fn, ms);
-	}
-
-	static setImmediate(fn, ms)
-	{
-		this.set(fn, ms, true);
-	}
-
-	static clear(fn)
-	{
-		clearInterval(this.id[fn]);
-	}
-
-	static id = {};
-}
-
 class ext
 {
 	static isCachable(n)
@@ -1626,44 +1600,7 @@ class formatter
 
 		str.hasChars('&') && str.replace(/ & /g, ' and ');
 
-		return emojizer.apply(str.output);
-	}
-}
-
-class emojizer
-{
-	static apply(s)
-	{
-		return s.replace(/<3+|([+^-])_\1|[;:]([xvopd]+\b|[|()/\\])|\b(xd|xo)+\b/gi, m => this.get(m));
-	}
-
-	static get(s)
-	{
-		s = s.toLowerCase().slice(0, 2);
-
-		return this.map[s] || s;
-	}
-
-	static map = {
-		':p':'\u{1F60B}',
-		';p':'\u{1F60B}',
-		':d':'\u{1F604}',
-		';d':'\u{1F604}',
-		':o':'\u{1F62F}',
-		':v':'\u{0270C}',
-		':x':'\u{1F635}',
-		'xo':'\u{1F635}',
-		'xd':'\u{1F606}',
-		':)':'\u{1F642}',
-		';)':'\u{1F609}',
-		':(':'\u{1F641}',
-		':|':'\u{1F610}',
-		'-_':'\u{1F611}',
-		'^_':'\u{1F60A}',
-		'+_':'\u{1F915}',
-		':/':'\u{1F615}',
-		':\\':'\u{1F615}',
-		'<3':'\u2764\ufe0f',
+		return str.output;
 	}
 }
 
