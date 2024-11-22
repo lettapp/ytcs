@@ -1,7 +1,6 @@
 <proto hidden>
-	<div protoid="UIView"></div>
 	<a protoid="UIAnchor" target="_blank"></a>
-	<img protoid="UIImage" src="">
+	<progress-bar protoid="UIProgressBar" class="CSProgressBar"></progress-bar>
 	<cs-app protoid="UIWindow" id="CSApp" hidden>
 		<link rel="stylesheet" href="{url}html/style.css">
 		<div class="CSViewStack" id="views"></div>
@@ -9,24 +8,22 @@
 	<div protoid="UINavView">
 		<div class="CSViewStack" id="views"></div>
 	</div>
-	<input protoid="UIInput" class="CSInput" spellcheck="false" autocomplete="off">
 	<div protoid="UIProgressInput">
 		<div class="CSApiKeyInput" id="textInput">
 		</div>
 	</div>
-	<div protoid="UISearchView">
-		<div class="CSSearchHeader" id="header"></div>
-	</div>
-	<div protoid="UIComment" class="CSComment">
+	<search protoid="UISearchView">
+		<header id="header"></header>
+	</search>
+	<comment protoid="UIComment">
 		<a class="CSUserImage" href="{channelUrl}" target="_blank" id="userImage"></a>
-		<div class="CSGrow" id="main">
-			<div class="CSCommentHeader" id="meta">
+		<main id="main">
+			<author id="meta">
 				<a class="CSAuthorName" href="{channelUrl}" target="_blank">{displayName}</a>
-				<a class="CSCommentMeta" href="{permalink}" target="_blank">{publishedAt}</a>
-			</div>
-		</div>
-	</div>
-	<iframe protoid="UIEmbeddedPlayer" class="CSEmbeddedPlayer" allowfullscreen></iframe>
+				<a class="CSCommentTime" href="{permalink}" target="_blank">{publishedAt}</a>
+			</author>
+		</main>
+	</comment>
 	<div protoid="UIFeaturesView" class="CSContentView CSFeaturesView">
 		<h1>Hooray!</h1>
 		<p>When comments count is turned on you can search using special keywords.</p>
@@ -44,27 +41,30 @@
 		</ul>
 		<p>General Settings:
 		<ul>
-			<li>Type <code>:keyboard</code> to change keyboard shortcuts.
+			<li>Type <code>/commands</code> to change keyboard shortcuts.
 		</ul>
 	</div>
-	<div protoid="UICommandsView" class="CSContentView CSFeaturesView">
+	<commands protoid="UICommandsView" class="CSContentView CSCommandsView">
 		<h1>Keyboard Shortcuts</h1>
-		<p>If you try to set a shortcut and don't get feedback, it is being used by other extension and needs to be released first.</p>
-		<p></p>
-	</div>
-	<div protoid="UICommand" class="CSCommand">
+		<p>Few things to take in mind before setting a shortcut:</p>
+		<ul>
+			<li>Shortcut reserved by other app needs to be released before you can use it here.
+			<li>You can use the <code>Shift + Key</code> pattern if you are willing to override the default behavior.
+		</ul>
+	</commands>
+	<shortcut protoid="UICommand">
 		<label>{title}</label>
 		<edit id="commandInput">
 			<error></error>
 		</edit>
-	</div>
-	<div protoid="UIUpdatesView" class="CSView CSUpdatesView">
+	</shortcut>
+	<updates protoid="UIUpdatesView" class="CSView CSBasicView">
 		<h1>Updates</h1>
-	</div>
-	<div protoid="UIUpdate" class="CSUpdate" data-read="{read}">
-		<div>{title}</div>
-		<p>{detail}</p>
-	</div>
+	</updates>
+	<update protoid="UIUpdate" data-read="{read}">
+		<header>{header}</header>
+		<detail>{detail}</detail>
+	</update>
 	<div protoid="UIAuthView" class="CSContentView CSFlexCenter">
 		<h1>Welcome!</h1>
 		<p class="CSSelectable">Please insert your Youtube Data API key</p>
@@ -90,7 +90,7 @@
 	</div>
 	<button protoid="UIProgressButton" class="CSProgressButton">
 		<div label="{label}"></div>
-		<div label="{label}"></div>
+		<div label="{label}" style="width:{usage}%"></div>
 	</button>
 	<svg protoid="UIIconCross" viewBox="0 0 20 20">
 		<path d="M15.898,4.045c-0.271-0.272-0.713-0.272-0.986,0l-4.71,4.711L5.493,4.045c-0.272-0.272-0.714-0.272-0.986,0s-0.272,0.714,0,0.986l4.709,4.711l-4.71,4.711c-0.272,0.271-0.272,0.713,0,0.986c0.136,0.136,0.314,0.203,0.492,0.203c0.179,0,0.357-0.067,0.493-0.203l4.711-4.711l4.71,4.711c0.137,0.136,0.314,0.203,0.494,0.203c0.178,0,0.355-0.067,0.492-0.203c0.273-0.273,0.273-0.715,0-0.986l-4.711-4.711l4.711-4.711C16.172,4.759,16.172,4.317,15.898,4.045z"/>
@@ -104,4 +104,23 @@
 	<svg protoid="UIIconBell" viewBox="0 0 24 24">
 		<path d="M17.133 12.632v-1.8a5.406 5.406 0 0 0-4.154-5.262.955.955 0 0 0 .021-.106V3.1a1 1 0 0 0-2 0v2.364a.955.955 0 0 0 .021.106 5.406 5.406 0 0 0-4.154 5.262v1.8C6.867 15.018 5 15.614 5 16.807 5 17.4 5 18 5.538 18h12.924C19 18 19 17.4 19 16.807c0-1.193-1.867-1.789-1.867-4.175ZM8.823 19a3.453 3.453 0 0 0 6.354 0H8.823Z"/>
 	</svg>
+	<svg protoid="UIIconSend" viewBox="0 0 24 24">
+		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v13m0-13 4 4m-4-4-4 4"/>
+	</svg>
+	<svg protoid="UIIconEye" viewBox="0 0 24 24">
+		<path fill-rule="evenodd" d="M4.998 7.78C6.729 6.345 9.198 5 12 5c2.802 0 5.27 1.345 7.002 2.78a12.713 12.713 0 0 1 2.096 2.183c.253.344.465.682.618.997.14.286.284.658.284 1.04s-.145.754-.284 1.04a6.6 6.6 0 0 1-.618.997 12.712 12.712 0 0 1-2.096 2.183C17.271 17.655 14.802 19 12 19c-2.802 0-5.27-1.345-7.002-2.78a12.712 12.712 0 0 1-2.096-2.183 6.6 6.6 0 0 1-.618-.997C2.144 12.754 2 12.382 2 12s.145-.754.284-1.04c.153-.315.365-.653.618-.997A12.714 12.714 0 0 1 4.998 7.78ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
+	</svg>
+	<changelog protoid="UIChangelogView" class="CSContentView CSChangelogView">
+		<h1>Version Update</h1>
+		<p>Here are some features that were added in the recent update:</p>
+		<h2>Text Highlighting</h2>
+		<ul>
+			<li>Added the ability to Highlight text in search results.
+			<li>To try it, hit <code>Ctrl-F</code> while scrolling through the results.
+		</ul>
+		<h2>Keyboard Shortcuts</h2>
+		<ul>
+			<li>Edit keyboard shortcuts for commands like starting/closing the extension by typing <code>/commands</code> in the search box.
+		</ul>
+	</changelog>
 </proto>

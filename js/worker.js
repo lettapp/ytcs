@@ -350,8 +350,7 @@ class object
 	{
 		const x = {};
 
-		for (const o of array)
-		{
+		for (const o of array) {
 			x[o[k]] = o;
 		}
 
@@ -362,8 +361,7 @@ class object
 	{
 		const x = {};
 
-		for (const k in o)
-		{
+		for (const k in o) {
 			x[k] = is.object(o[k]) ? this.map(o[k], callback) : callback(o[k]);
 		}
 
@@ -383,8 +381,7 @@ class object
 
 	static filter(o)
 	{
-		for (const k in o)
-		{
+		for (const k in o) {
 			is.null(o[k]) && delete o[k];
 		}
 
@@ -452,7 +449,7 @@ class time
 			}
 		}
 
-		return '';
+		return '1 second ago';
 	}
 
 	static pt2int(pt)
@@ -496,6 +493,10 @@ class time
 
 	static toUnix(s)
 	{
+		if (+s == s) {
+			return s;
+		}
+
 		return new Date(s).getTime() / 1e3;
 	}
 
@@ -667,13 +668,15 @@ class notifications
 		}
 	}
 
-	static send(pack)
+	static send(pack, confirm)
 	{
 		const [id, data] = unpack(pack);
 
 		for (const target of this.getChannel(id)) {
-			target[on(id)](data);
+			confirm |= target[on(id)](data);
 		}
+
+		return confirm;
 	}
 
 	static contextInvalidated(isUncaught)
@@ -769,34 +772,30 @@ class AppStorage extends Storage
 				this.onChange.bind(this)
 			);
 
-			assign(this.items, r);
+			this.items = r;
 		});
 	}
 
 	onChange(items)
 	{
-		for (const k in items) {
-			this.handleChange(k, items[k]);
+		for (const k in items)
+		{
+			this.items[k] = items[k].newValue;
+
+			notifications.send({
+				[string.format('%sDataChange', k)]:this.items[k]
+			});
 		}
 	}
 
-	handleChange(k, {newValue})
+	upgrade(loaded)
 	{
-		this.items[k] = newValue;
-
-		notifications.send({
-			[string.format('%sDataChange', k)]:newValue
-		});
-	}
-
-	upgrade(storage)
-	{
+		const oldVer = loaded.ver;
 		const newVer = chrome.runtime.getManifest().version;
-		const oldVer = storage.ver;
 
 		if (oldVer != newVer)
 		{
-			const upgraded = assign({
+			this.restruct(loaded, {
 				cache:{},
 				user:{},
 				pos:{},
@@ -805,14 +804,31 @@ class AppStorage extends Storage
 				commands: {
 					start:['ctrlKey', 'KeyS'],
 					close:['Escape'],
-					fsClose:[],
+					highlight:['ctrlKey', 'KeyF'],
 					tsSearch:[],
+					fsClose:[],
 				}
-			}, storage);
+			});
+
+			if (oldVer && newVer == '24.11.22') {
+				loaded.updates.unshift({type:'changelog', read:false});
+			}
 
 			this.persist(
-				assign(storage, upgraded, {ver:newVer})
+				assign(loaded, {ver:newVer})
 			);
+		}
+	}
+
+	restruct(origin, struct)
+	{
+		for (const k in struct)
+		{
+			!(k in origin) &&
+				(origin[k] = struct[k]);
+
+			is.object(struct[k]) &&
+				this.restruct(origin[k], struct[k]);
 		}
 	}
 }
@@ -889,6 +905,26 @@ class MasterPort extends Portable
 		this.onConnect(
 			chrome.runtime.connect({name:this.port.name})
 		);
+
+		this.didReconnect = true;
+	}
+
+	postMessage(message)
+	{
+		let wait = 0;
+
+		if (this.canPost)
+		{
+			if (this.didReconnect) {
+				wait = 50;
+			}
+
+			setTimeout(
+				this.port.postMessage(message), wait
+			);
+
+			this.didReconnect = false;
+		}
 	}
 
 	get canPost()
@@ -1648,12 +1684,28 @@ class tabs
 
 class http
 {
-	static async get(url, params, opts)
+	static get(url, params, opts)
 	{
 		if (params) {
 			url = this.addUrlParams(url, params);
 		}
 
+		return this.send(url, opts);
+	}
+
+	static post(url, params)
+	{
+		const body = new FormData;
+
+		entries(params).forEach(
+			([k, v]) => body.append(k, v)
+		);
+
+		return this.send(url, {method:'POST', body});
+	}
+
+	static async send(url, opts)
+	{
 		const r = await fetch(url, opts).catch(none);
 
 		if (r)
@@ -1970,14 +2022,25 @@ class AppLettApi
 		return this.get('/auth', {key});
 	}
 
-	updates(since)
+	updates(key)
 	{
-		return this.get('/updates', {since});
+		return this.get('/updates', {key});
 	}
 
 	async get(endpoint, params, opts)
 	{
 		const fetch = await http.get(this.baseUrl + endpoint, params, opts);
+
+		if (!fetch.ok) {
+			fetch.error ||= fetch.data.error || 'errServer';
+		}
+
+		return fetch;
+	}
+
+	async post(endpoint, params)
+	{
+		const fetch = await http.post(this.baseUrl + endpoint, params);
 
 		if (!fetch.ok) {
 			fetch.error ||= fetch.data.error || 'errServer';
@@ -3045,11 +3108,6 @@ class App extends Main
 		self.api = new ApiManager(mem.user.key);
 	}
 
-	onStartup()
-	{
-		mem.cache = {};
-	}
-
 	onClicked(tab)
 	{
 		this.sendMessage({activate:true}, tab.id);
@@ -3066,10 +3124,19 @@ class App extends Main
 		this.setAlarms();
 	}
 
+	onStartup()
+	{
+		this.setAlarms();
+	}
+
 	onAlarmed({name})
 	{
-		if (name == 'updatesCheck') {
-			return this.onUpdatesCheck();
+		switch (name) {
+			case 'updatesCheck':
+				return this.onUpdatesCheck();
+
+			case 'refreshCache':
+				return this.onCacheRefresh();
 		}
 	}
 
@@ -3099,25 +3166,33 @@ class App extends Main
 
 	setAlarms()
 	{
-		chrome.alarms.create('updatesCheck', {periodInMinutes:1440});
+		chrome.alarms.create('refreshCache', {periodInMinutes:120});
+		chrome.alarms.create('updatesCheck', {periodInMinutes:360});
+	}
+
+	onCacheRefresh()
+	{
+		mem.cache = {};
 	}
 
 	onUpdatesCheck()
 	{
-		const since = mem.updates.find(x => x.origin == 'dev')?.time ?? 0;
+		if (!mem.user.key) {
+			return;
+		}
 
-		api.lett.app.updates(since).then(
+		api.lett.app.updates(mem.user.key).then(
 			r => this.addUpdates(r.data?.items ?? [])
 		);
 	}
 
 	addUpdates(items)
 	{
-		items.forEach(item => item.read = false);
-
-		mem.updates.push(...items) & mem.updates.sort(
-			(a, b) => b.time - a.time
+		items.forEach(
+			item => assign(item, {id:math.randint(5), read:false})
 		);
+
+		mem.updates.unshift(...items);
 	}
 }
 

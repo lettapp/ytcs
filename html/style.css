@@ -1,5 +1,6 @@
 html {
 	--cs-background:#222;
+	--cs-hover-background:#272727;
 	--cs-header-background:#292929;
 	--cs-placeholder-color:rgba(255,255,255,.1);
 	--cs-text-color:#d6d6d6;
@@ -7,46 +8,46 @@ html {
 	--cs-meta-color:#888;
 	--cs-comment-chain-color:#333;
 	--cs-img-background:#2f2f2f;
-	--cs-owner-badge-color:#717171;
-	--cs-border-color:#666;
-	--cs-cc-badge-background:#333;
-	--cs-cc-badge-color:#fff;
-	--cs-cc-badge-border-color:orange;
-	--cs-cc-badge-color-disabled:#777;
-	--cs-code-snippet-background:#999;
-	--cs-code-snippet-color:#000;
-	--cs-info-view-text-color:#aaa;
+	--cs-comment-count-background:#333;
+	--cs-comment-count-color:#fff;
+	--cs-comment-count-border-color:orange;
+	--cs-comment-count-color-disabled:#777;
+	--cs-code-background:#999;
+	--cs-code-color:#000;
 	--cs-input-border-color:#666;
 	--cs-input-progress-color-error:#aaa;
 	--cs-theme-color:#c7c7c7;
 	--cs-button-color:#222;
 	--cs-grayscale:grayscale(.6);
 	--cs-error-color:#f28b82;
+	--cs-text-mark-width:1px;
+	--cs-text-mark-color:orange;
+	--cs-text-mark-style:dotted;
 }
 html:not([dark]):not([fullscreen]) {
 	--cs-background:#f8f8f8;
+	--cs-hover-background:#efefef;
 	--cs-header-background:#dadada;
-	--cs-border-color:#cecece;
 	--cs-placeholder-color:rgba(0,0,0,.29);
 	--cs-text-color:#111;
 	--cs-link-color:#065fd4;
 	--cs-meta-color:#888;
 	--cs-comment-chain-color:#ddd;
 	--cs-img-background:#eee;
-	--cs-owner-badge-color:#9f9f9f;
-	--cs-cc-badge-background:#ccc;
-	--cs-cc-badge-color:#222;
-	--cs-cc-badge-border-color:darkcyan;
-	--cs-cc-badge-color-disabled:#555;
-	--cs-code-snippet-background:#e5e5e5;
-	--cs-info-view-text-color:#222;
+	--cs-comment-count-background:#ccc;
+	--cs-comment-count-color:#222;
+	--cs-comment-count-border-color:darkcyan;
+	--cs-comment-count-color-disabled:#555;
+	--cs-code-background:#dfdfdf;
 	--cs-input-border-color:#ccc;
 	--cs-input-progress-color-error:crimson;
 	--cs-theme-color:#3b7bbF;
 	--cs-button-color:#fff;
-	--cs-theme-color-disabled:#888;
 	--cs-grayscale:none;
 	--cs-error-color:#f82e1c;
+	--cs-text-mark-width:1px;
+	--cs-text-mark-color:red;
+	--cs-text-mark-style:solid;
 }
 [hidden] {
 	display:none !important;
@@ -81,11 +82,58 @@ html:not([dark]):not([fullscreen]) {
 	font:inherit;
 	overflow:hidden;
 }
-#CSApp *::before,
-#CSApp *::after {
-	display:none;
+#CSApp UIView {
+	display:block;
+}
+#CSApp UIResizeBar {
+	position:absolute;
+	z-index:1;
+}
+#CSApp UIResizeBar[resize=we] {
+	top:0;
+	height:20px;
+	width:100%;
+	cursor:move;
+}
+#CSApp UIResizeBar[resize=w] {
+	left:-4px;
+	width:10px;
+	height:100%;
+	cursor:ew-resize;
+}
+#CSApp UIResizeBar[resize=e] {
+	right:-4px;
+	width:10px;
+	height:100%;
+	cursor:ew-resize;
+}
+#CSApp UIResizeBar[resize=n] {
+	top:-4px;
+	height:8px;
+	width:100%;
+	cursor:ns-resize;
+	z-index:2;
+}
+#CSApp UIResizeBar[resize=nw] {
+	left:-6px;
+	top:-6px;
+	width:16px;
+	height:16px;
+	z-index:3;
+	cursor:nwse-resize;
+}
+#CSApp UIResizeBar[resize=ne] {
+	right:-6px;
+	top:-6px;
+	width:16px;
+	height:16px;
+	z-index:3;
+	cursor:nesw-resize;
 }
 #CSApp button {
+	display:flex;
+	align-items:center;
+	justify-content:center;
 	cursor:default;
 }
 #CSApp a {
@@ -116,6 +164,11 @@ html:not([dark]):not([fullscreen]) {
 	stroke:currentColor;
 	stroke-width:0;
 }
+#CSApp .CSScroll {
+	overflow-y:scroll;
+	scrollbar-width:none;
+	overscroll-behavior:contain;
+}
 #CSApp .CSOverscroll::after {
 	content:"";
 	display:block;
@@ -140,24 +193,6 @@ html:not([dark]):not([fullscreen]) {
 	display:flex;
 	flex-flow:column;
 }
-#CSApp .CSScrollView {
-	overflow-y:scroll;
-	scrollbar-width:none;
-	overscroll-behavior:contain;
-}
-#CSApp .CSInput {
-	color:inherit;
-	background:none;
-}
-#CSApp .CSUnderline {
-	text-decoration:underline;
-}
-#CSApp .CSUnderlineHover:hover {
-	text-decoration:underline;
-}
-#CSApp .CSFlex {
-	display:flex;
-}
 #CSApp .CSFlexCenter {
 	display:flex;
 	flex-flow:column;
@@ -165,63 +200,8 @@ html:not([dark]):not([fullscreen]) {
 	text-align:center;
 	height:100%;
 }
-#CSApp .CSCenterY {
-	display:flex;
-	align-items:center;
-}
-#CSApp .CSGrow {
-	flex-grow:1;
-}
-#CSApp .CSNoShrink {
-	flex-shrink:0;
-}
 #CSApp .CSStickBottom {
 	margin-top:auto;
-}
-#CSApp .CSResizeBar {
-	position:absolute;
-	z-index:1;
-}
-#CSApp .CSResizeBar[resize=we] {
-	top:0;
-	height:20px;
-	width:100%;
-	cursor:move;
-}
-#CSApp .CSResizeBar[resize=w] {
-	left:-4px;
-	width:10px;
-	height:100%;
-	cursor:ew-resize;
-}
-#CSApp .CSResizeBar[resize=e] {
-	right:-4px;
-	width:10px;
-	height:100%;
-	cursor:ew-resize;
-}
-#CSApp .CSResizeBar[resize=n] {
-	top:-4px;
-	height:8px;
-	width:100%;
-	cursor:ns-resize;
-	z-index:2;
-}
-#CSApp .CSResizeBar[resize=nw] {
-	left:-6px;
-	top:-6px;
-	width:16px;
-	height:16px;
-	z-index:3;
-	cursor:nwse-resize;
-}
-#CSApp .CSResizeBar[resize=ne] {
-	right:-6px;
-	top:-6px;
-	width:16px;
-	height:16px;
-	z-index:3;
-	cursor:nesw-resize;
 }
 #CSApp .CSNavButton {
 	opacity:.5;
@@ -245,43 +225,80 @@ html:not([dark]):not([fullscreen]) {
 	top:16px;
 	left:15px;
 }
-#CSApp .CSSearchHeader {
+#CSApp search {
+	display:block;
+}
+#CSApp search header {
+	background-color:var(--cs-header-background);
 	display:flex;
 	align-items:center;
-	background-color:var(--cs-header-background);
-	padding-left:20px;
-	padding-right:46px;
 	height:56px;
+	padding-right:46px;
+}
+#CSApp search header {
+	display:flex;
+}
+#CSApp search header > * {
+	flex-shrink:0;
+}
+#CSApp search header input {
+	flex:1;
+	height:100%;
+	padding-left:20px;
+	font-size:16px;
+}
+#CSApp search header input::placeholder {
+	color:var(--cs-placeholder-color);
+	font-size:15px;
+}
+#CSApp UISearchIcons {
+	display:flex;
+	min-width:32px;
+	margin:0 6px;
+}
+#CSApp .CSSearchHeaderIcon {
+	width:24px;
+	height:24px;
+	margin:0 2px;
+	opacity:.5;
+	transform:scale(0);
+	transition:transform 200ms;
+}
+#CSApp .CSSearchHeaderIcon:hover {
+	opacity:.8;
+}
+#CSApp .CSSearchHeaderIcon[active] {
+	opacity:.8;
+}
+#CSApp .CSSearchHeaderIcon.CSAppear {
+	transform:scale(1);
 }
 #CSApp .CSSearchBody {
 	top:56px;
 }
-#CSApp .CSSearchHeader input {
-	flex:1;
-	height:40px;
-	font-size:16px;
-}
-#CSApp .CSSearchHeader input::placeholder {
-	color:var(--cs-placeholder-color);
-	font-size:15px;
-}
 #CSApp .CSCommentCount {
-	background-color:var(--cs-cc-badge-background);
-	border-bottom:2px solid var(--cs-cc-badge-border-color);
+	box-sizing:unset;
+	width:3ch;
+	min-width:3ch;
+	background-color:var(--cs-comment-count-background);
+	border-bottom:2px solid var(--cs-comment-count-border-color);
 	border-radius:4px 4px 0 0;
-	color:var(--cs-cc-badge-color);
+	color:var(--cs-comment-count-color);
 	padding:2px 5px 0;
-	min-width:32px;
 	font-size:12px;
 	text-align:center;
 	opacity:.7;
-	transition:border-color 200ms, color 200ms;
+	transition-duration:200ms;
+	transition-property:width, color, border-color, border-radius;
+}
+#CSApp .CSCommentCount text {
+	color:inherit;
 }
 #CSApp .CSCommentCount:hover {
 	opacity:1;
 }
 #CSApp .CSCommentCount[disabled] {
-	color:var(--cs-cc-badge-color-disabled);
+	color:var(--cs-comment-count-color-disabled);
 	border-color:transparent;
 	border-radius:4px;
 	opacity:1;
@@ -290,30 +307,6 @@ html:not([dark]):not([fullscreen]) {
 	margin-top:16px;
 	padding-left:20px;
 	padding-right:40px;
-}
-#CSApp .CSComment {
-	display:flex;
-	padding-bottom:20px;
-	user-select:text;
-}
-#CSApp .CSComment:not(:first-child) {
-	margin-left:56px;
-}
-#CSApp .CSComment:not(:first-child) .CSUserImage {
-	width:24px;
-	height:24px;
-}
-#CSApp .CSComment.CSChained::before {
-	background:var(--cs-comment-chain-color);
-	display:block;
-	position:absolute;
-	width:2px;
-	height:100%;
-	left:11px;
-	content:"";
-}
-#CSApp .CSComment.CSHidden {
-	opacity:.300;
 }
 #CSApp .CSUserImage {
 	background-color:var(--cs-img-background);
@@ -329,52 +322,88 @@ html:not([dark]):not([fullscreen]) {
 	color:inherit;
 	font-weight:500;
 }
-#CSApp .CSOwnerBadge {
-	fill:var(--cs-owner-badge-color);
+#CSApp .CSCommentTime {
+	color:var(--cs-meta-color);
+	margin-left:6px;
+}
+#CSApp .CSCommentTime:hover {
+	color:inherit;
+}
+#CSApp comment {
+	display:flex;
+	padding-bottom:20px;
+	user-select:text;
+}
+#CSApp comment author {
+	display:flex;
+	height:20px;
+	line-height:18px;
+	margin-bottom:2px;
+	font-size:13px;
+}
+#CSApp [isuploader] author::after {
+	content:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='%23818181' viewBox='0 0 24 24'><path d='M12,2C6.48,2,2,6.48,2,12s4.48,10,10,10s10-4.48,10-10 S17.52,2,12,2z M9.92,17.93l-4.95-4.95l2.05-2.05l2.9,2.9l7.35-7.35l2.05,2.05L9.92,17.93z'/></svg>");
+	display:block;
 	width:13px;
 	height:13px;
 	margin-top:2px;
 	margin-left:4px;
 }
-#CSApp .CSCommentMeta {
-	color:var(--cs-meta-color);
-	margin-left:6px;
-}
-#CSApp .CSCommentMeta:hover {
-	color:inherit;
-}
-#CSApp .CSByUploader .CSCommentMeta {
+#CSApp comment[isUploader] .CSCommentTime {
 	display:none;
 }
-#CSApp .CSCommentText {
+#CSApp comment main {
+	flex-grow:1;
+}
+#CSApp comment:not(:first-child) {
+	margin-left:56px;
+}
+#CSApp comment:not(:first-child) .CSUserImage {
+	width:24px;
+	height:24px;
+}
+#CSApp comment[isChained]::before {
+	background-color:var(--cs-comment-chain-color);
+	display:block;
+	position:absolute;
+	width:2px;
+	height:100%;
+	left:11px;
+	content:"";
+}
+#CSApp comment iframe {
+	background:#000;
+	width:100%;
+	aspect-ratio:16/9;
+	margin-top:12px;
+}
+#CSApp comment text {
 	display:-webkit-box;
 	width:auto;
 	height:auto;
 	word-break:break-word;
 }
-#CSApp .CSCommentText[dir=rtl] {
+#CSApp comment text[dir=rtl] {
 	-webkit-box-orient:vertical;
 	-webkit-box-align:end;
 }
-#CSApp .CSCommentText[lang=ar] {
+#CSApp comment text[lang=ar] {
 	font-family:sans-serif;
 	font-size:medium;
 }
-#CSApp .CSCommentText a {
+#CSApp comment text a {
 	color:var(--cs-link-color);
+}
+#CSApp comment text mark {
+	border-bottom-width:var(--cs-text-mark-width);
+	border-bottom-color:var(--cs-text-mark-color);
+	border-bottom-style:var(--cs-text-mark-style);
 }
 #CSApp .CSTrim {
 	-webkit-box-orient:vertical;
 	-webkit-line-clamp:2;
 	line-clamp:2;
 	word-break:break-word;
-}
-#CSApp .CSCommentHeader {
-	display:flex;
-	height:20px;
-	line-height:18px;
-	margin-bottom:2px;
-	font-size:13px;
 }
 #CSApp .CSDialogMessage {
 	padding:20px;
@@ -385,15 +414,6 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp .CSDialogMessage a {
 	text-decoration:underline;
-}
-#CSApp .CSEmbeddedPlayer {
-	background:#000;
-	width:100%;
-	aspect-ratio:16/9;
-	margin-top:12px;
-}
-#CSApp .CSFeaturesView {
-	color:var(--cs-info-view-text-color);
 }
 #CSApp .CSContentView {
 	display:flex;
@@ -411,11 +431,15 @@ html:not([dark]):not([fullscreen]) {
 	text-align:center;
 	font-size:20px;
 }
+#CSApp .CSContentView h2 {
+	margin-bottom:8px;
+	font-weight:500;
+}
 #CSApp .CSContentView p {
 	margin-bottom:12px;
 }
 #CSApp .CSContentView b {
-	font-weight:bold;
+	font-weight:500;
 }
 #CSApp .CSContentView ul {
 	margin-bottom:25px;
@@ -423,14 +447,14 @@ html:not([dark]):not([fullscreen]) {
 #CSApp .CSContentView ul p {
 	margin-bottom:7px;
 }
-#CSApp .CSContentView ul li {
+#CSApp .CSContentView li {
 	padding-left:20px;
 	margin-bottom:2px;
 }
 #CSApp .CSContentView code {
 	display:inline;
-	background-color:var(--cs-code-snippet-background);
-	color:var(--cs-code-snippet-color);
+	background-color:var(--cs-code-background);
+	color:var(--cs-code-color);
 	border-radius:2px;
 	letter-spacing:1px;
 	padding:2px 5px 2px 6px;
@@ -566,7 +590,7 @@ html:not([dark]):not([fullscreen]) {
 	width:176px;
 	height:37px;
 	font-size:14px;
-	font-weight:bold;
+	font-weight:500;
 	border-radius:25px;
 	white-space:nowrap;
 	overflow:hidden;
@@ -589,9 +613,7 @@ html:not([dark]):not([fullscreen]) {
 	height:100%;
 	transition:filter 200ms;
 }
-#CSApp .CSProgressButton > :first-child {
-	z-index:1;
-	width:0;
+#CSApp .CSProgressButton > :last-child {
 	border:none;
 	border-top-right-radius:0;
 	border-bottom-right-radius:0;
@@ -599,27 +621,41 @@ html:not([dark]):not([fullscreen]) {
 	background-color:var(--cs-theme-color);
 }
 #CSApp .CSProgressButton > ::after {
-	display:block !important;
+	display:block;
 	content:attr(label);
 	position:absolute;
 	left:34px;
 }
-#CSApp .CSCommand {
-	display:flex;
-	margin-bottom:5px;
+#CSApp .CSCommandsView ul {
+	margin-bottom:15px;
+	padding-left:27px;
 }
-#CSApp .CSCommand label {
+#CSApp .CSCommandsView li {
+	margin-bottom:10px;
+	padding-left:5px;
+	list-style:disc;
+	overflow:visible;
+}
+#CSAp .CSCommandsView code {
+	padding:2px 4px 1px 5px;
+	letter-spacing:.1px;
+}
+#CSApp shortcut {
+	display:flex;
+	margin-bottom:4px;
+}
+#CSApp shortcut label {
 	flex:1;
 	margin-top:7px;
 }
-#CSApp .CSCommand edit {
+#CSApp shortcut edit {
 	display:flex;
 	flex-flow:column;
 	width:180px;
 }
-#CSApp .CSCommand input {
+#CSApp shortcut input {
 	order:0;
-	background-color:var(--cs-cc-badge-background);
+	background-color:var(--cs-comment-count-background);
 	padding:2px 10px;
 	border-radius:3px;
 	height:34px;
@@ -628,17 +664,17 @@ html:not([dark]):not([fullscreen]) {
 	text-align:center;
 	text-overflow:ellipsis;
 }
-#CSApp .CSCommand input:hover {
+#CSApp shortcut input:hover {
 	filter:brightness(.95);
 }
-#CSApp .CSCommand input:focus {
+#CSApp shortcut input:focus {
 	padding-bottom:0;
 	border-bottom:2px solid #3b7bbF;
 	border-bottom-left-radius:0;
 	border-bottom-right-radius:0;
 	filter:brightness(.95);
 }
-#CSApp .CSCommand error {
+#CSApp shortcut error {
 	order:1;
 	display:block;
 	height:20px;
@@ -649,36 +685,43 @@ html:not([dark]):not([fullscreen]) {
 	white-space:nowrap;
 	text-align:center;
 }
-#CSApp .CSCommand error:not(:empty) ~ input {
+#CSApp shortcut error:not(:empty) ~ input {
 	border-bottom-color:var(--cs-error-color);
 }
-#CSApp .CSUpdatesView h1 {
+#CSApp .CSBasicView {
 	display:flex;
-    height:50px;
+	flex-flow:column;
+}
+#CSApp .CSBasicView > * {
+	flex-shrink:0;
+}
+#CSApp .CSBasicView h1 {
+	display:flex;
+    height:56px;
     align-items:center;
     justify-content:center;
-    padding-top: 7px;
+	font-size:15px;
+	margin-right:2px;
 }
-#CSApp .CSUpdate {
-	padding:12px 20px;
+#CSApp update {
+	display:block;
+	padding:10px 20px;
 	border-left:2px solid transparent;
 	transition:border-color 200ms;
 }
-#CSApp .CSUpdate:hover {
-	background-color:var(--cs-border-color);
+#CSApp update:hover {
+	background-color:var(--cs-hover-background);
 }
-#CSApp .CSUpdate[data-read="false"] {
+#CSApp update[data-read="false"] {
 	border-left-color:var(--cs-link-color);
 }
-#CSApp .CSBellIcon {
-	width:24px;
-	height:24px;
-	margin:0 8px;
+#CSApp update header {
+	margin-bottom:3px;
+	font-weight:500;
 }
-#CSApp .CSMayAppear {
-	transform:scale(0);
-	transition:transform 300ms;
+#CSApp .CSChangelogView p {
+	margin-bottom:20px;
 }
-#CSApp .CSAppear {
-	transform:scale(1);
+#CSApp .CSChangelogView ul {
+	margin-bottom:15px;
 }
