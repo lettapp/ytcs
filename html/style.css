@@ -16,6 +16,7 @@ html {
 	--cs-code-color:#000;
 	--cs-input-border-color:#666;
 	--cs-input-progress-color-error:#aaa;
+	--cs-search-progress-bar-color:#7f7f7f;
 	--cs-theme-color:#c7c7c7;
 	--cs-button-color:#222;
 	--cs-grayscale:grayscale(.6);
@@ -41,6 +42,7 @@ html:not([dark]):not([fullscreen]) {
 	--cs-code-background:#dfdfdf;
 	--cs-input-border-color:#ccc;
 	--cs-input-progress-color-error:crimson;
+	--cs-search-progress-bar-color:var(--cs-theme-color);
 	--cs-theme-color:#3b7bbF;
 	--cs-button-color:#fff;
 	--cs-grayscale:none;
@@ -79,6 +81,7 @@ html:not([dark]):not([fullscreen]) {
 	padding:0;
 	outline:none !important;
 	border:none;
+	text-decoration:none;
 	font:inherit;
 	overflow:hidden;
 }
@@ -86,6 +89,7 @@ html:not([dark]):not([fullscreen]) {
 	display:block;
 }
 #CSApp UIResizeBar {
+	display:block;
 	position:absolute;
 	z-index:1;
 }
@@ -175,7 +179,7 @@ html:not([dark]):not([fullscreen]) {
 	width:100%;
 	height:60%;
 }
-#CSApp .CSSelectable {
+#CSApp .CSTextSelect {
 	user-select:text;
 }
 #CSApp .CSViewStack {
@@ -201,7 +205,7 @@ html:not([dark]):not([fullscreen]) {
 	height:100%;
 }
 #CSApp .CSStickBottom {
-	margin-top:auto;
+	margin:auto auto 30px;
 }
 #CSApp .CSNavButton {
 	opacity:.5;
@@ -224,6 +228,84 @@ html:not([dark]):not([fullscreen]) {
 	height:24px;
 	top:16px;
 	left:15px;
+}
+#CSApp progress-bar {
+	display:block;
+	position:absolute;
+	height:1px;
+	width:0;
+	background:none;
+}
+#CSApp progress-bar[state=loading],
+#CSApp progress-bar[state=waiting] {
+	height:2px;
+	background-color:var(--cs-theme-color);
+}
+#CSApp progress-bar[state=loading] {
+	animation:progress-active 1s ease infinite;
+}
+#CSApp progress-bar[state=waiting] {
+	width:33%;
+	animation:progress-waiting 2s linear infinite;
+}
+#CSApp progress-bar[state=error] {
+	width:100%;
+	background-color:var(--cs-input-progress-color-error);
+}
+@keyframes progress-onelap {
+	0%		{ left:0%; width:0% }
+	50%		{ left:0%; width:100% }
+	100%	{ left:100%; width:0% }
+}
+@keyframes progress-active {
+	0%		{ left:0%; width:0% }
+	25%		{ left:0%; width:33% }
+	75%		{ left:33%; width:60% }
+	100%	{ left:100%; width:50% }
+}
+@keyframes progress-waiting {
+	0%		{ left:-33% }
+	100%	{ left:100% }
+}
+#CSApp UIProgressInput {
+	display:block;
+	width:100%;
+	margin-top:15px;
+	text-align:center;
+}
+#CSApp UIProgressInput input {
+	border-bottom:1px solid;
+	padding-bottom:4px;
+	font-size:15px;
+	text-align:center;
+	border-color:var(--cs-input-border-color);
+}
+#CSApp UIProgressInput progress-bar {
+	margin-top:-1px;
+}
+#CSApp UIProgressInput progress-bar[state=loading] {
+	margin-top:-2px;
+}
+#CSApp UIProgressInput text {
+	display:block;
+	height:20px;
+	padding-top:2px;
+	font-size:small;
+	color:var(--cs-input-progress-color-error);
+}
+#CSApp auth img {
+	width:325px;
+	margin:10px 0;
+	filter:var(--cs-grayscale);
+}
+#CSApp auth a {
+	display:block;
+	color:var(--cs-link-color);
+	margin:auto auto 30px;
+	font-size:small;
+}
+#CSApp auth a:hover {
+	text-decoration:underline;
 }
 #CSApp search {
 	display:block;
@@ -273,6 +355,14 @@ html:not([dark]):not([fullscreen]) {
 #CSApp .CSSearchHeaderIcon.CSAppear {
 	transform:scale(1);
 }
+#CSApp search progress-bar {
+	top:55px;
+}
+#CSApp search progress-bar[state=loading] {
+	background-color:var(--cs-search-progress-bar-color);
+	height:1px;
+	animation:progress-onelap 1s infinite;
+}
 #CSApp .CSSearchBody {
 	top:56px;
 }
@@ -288,8 +378,8 @@ html:not([dark]):not([fullscreen]) {
 	font-size:12px;
 	text-align:center;
 	opacity:.7;
-	transition-duration:200ms;
-	transition-property:width, color, border-color, border-radius;
+	transition-duration:250ms;
+	transition-property:width, border-color, border-radius, opacity, color;
 }
 #CSApp .CSCommentCount text {
 	color:inherit;
@@ -315,7 +405,13 @@ html:not([dark]):not([fullscreen]) {
 	height:40px;
 	margin-right:16px;
 	border-radius:50%;
-	flex-shrink:0;
+}
+#CSApp .CSUserImage img {
+	opacity:0;
+	transition:opacity 300ms;
+}
+#CSApp .CSUserImage img[loaded] {
+	opacity:1;
 }
 #CSApp .CSAuthorName {
 	display:inline-block;
@@ -330,9 +426,18 @@ html:not([dark]):not([fullscreen]) {
 	color:inherit;
 }
 #CSApp comment {
-	display:flex;
+	display:grid;
+	grid-template-rows:auto auto;
+	grid-template-columns:auto 1fr;
 	padding-bottom:20px;
 	user-select:text;
+}
+#CSApp comment > :first-child {
+	grid-column:1;
+	grid-row:1 / -1;
+}
+#CSApp comment > :not(:first-child) {
+	grid-column:2;
 }
 #CSApp comment author {
 	display:flex;
@@ -351,9 +456,6 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp comment[isUploader] .CSCommentTime {
 	display:none;
-}
-#CSApp comment main {
-	flex-grow:1;
 }
 #CSApp comment:not(:first-child) {
 	margin-left:56px;
@@ -387,10 +489,6 @@ html:not([dark]):not([fullscreen]) {
 	-webkit-box-orient:vertical;
 	-webkit-box-align:end;
 }
-#CSApp comment text[lang=ar] {
-	font-family:sans-serif;
-	font-size:medium;
-}
 #CSApp comment text a {
 	color:var(--cs-link-color);
 }
@@ -402,8 +500,10 @@ html:not([dark]):not([fullscreen]) {
 #CSApp .CSTrim {
 	-webkit-box-orient:vertical;
 	-webkit-line-clamp:2;
-	line-clamp:2;
 	word-break:break-word;
+}
+#CSApp .CSTrim:has(mark) {
+	-webkit-line-clamp:none;
 }
 #CSApp .CSDialogMessage {
 	padding:20px;
@@ -463,77 +563,6 @@ html:not([dark]):not([fullscreen]) {
 	font-size:smaller;
 	font-family:monospace;
 }
-#CSApp .CSViewArtwork {
-	width:325px;
-	margin:10px 0;
-	filter:var(--cs-grayscale);
-}
-#CSApp .CSFooterLink {
-	display:block;
-	color:var(--cs-link-color);
-	margin-bottom:30px;
-	font-size:small;
-}
-#CSApp .CSFooterLink:hover {
-	text-decoration:underline;
-}
-#CSApp .CSApiKeyInputComponent {
-	width:100%;
-	margin-top:15px;
-	text-align:center;
-}
-#CSApp .CSApiKeyInput input {
-	border-bottom:1px solid;
-	padding-bottom:4px;
-	font-size:15px;
-	text-align:center;
-	border-color:var(--cs-input-border-color);
-}
-#CSApp .CSApiKeyInputLog {
-	height:20px;
-	padding-top:2px;
-	font-size:small;
-	color:var(--cs-input-progress-color-error);
-}
-#CSApp .CSProgressBar {
-	position:absolute;
-	bottom:0;
-	height:1px;
-	width:100%;
-	background-color:none;
-}
-#CSApp .CSProgressBar[state=loading],
-#CSApp .CSProgressBar[state=waiting] {
-	height:2px;
-	background-color:var(--cs-theme-color);
-}
-#CSApp .CSProgressBar[state=loading] {
-	animation:progressActive 1s ease infinite;
-}
-#CSApp .CSProgressBar[state=waiting] {
-	width:33%;
-	animation:progressWaiting 2s linear infinite;
-}
-#CSApp .CSProgressBar[state=error] {
-	background-color:var(--cs-input-progress-color-error);
-}
-#CSApp .CSAppProgressBar {
-	top:0;
-	height:2px !important;
-}
-#CSApp .CSAppProgressBar[state=error] {
-	background-color:crimson;
-}
-@keyframes progressActive {
-	0%		{ left:0%; width:0% }
-	25%		{ left:0%; width:33% }
-	75%		{ left:33%; width:60% }
-	100%	{ left:100%; width:50% }
-}
-@keyframes progressWaiting {
-	0%		{ left:-33% }
-	100%	{ left:100% }
-}
 @keyframes wiggle {
 	10%, 90% {
 		transform:translate3d(-1px, 0, 0);
@@ -550,40 +579,6 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp .CSWiggle {
 	animation:wiggle 500ms;
-}
-#CSApp .CSButton {
-	display:flex;
-	align-items:center;
-	justify-content:center;
-	height:38px;
-	padding:0 18px;
-	border-radius:3px;
-	border:1px solid;
-	border-color:var(--cs-theme-color);
-	color:var(--cs-theme-color);
-	transition:filter 200ms;
-}
-#CSApp .CSButton:last-child {
-	border:none;
-	background-color:var(--cs-theme-color);
-	color:var(--cs-button-color);
-}
-#CSApp .CSButton:hover {
-	filter:brightness(.9);
-}
-#CSApp .CSButton:active {
-	filter:brightness(.8);
-}
-#CSApp .CSButtons {
-	display:flex;
-	justify-content:center;
-	margin:20px auto 25px;
-}
-#CSApp .CSButtons .CSButton {
-	margin-right:10px;
-}
-#CSApp .CSButtons .CSButton:last-child {
-	margin-right:0;
 }
 #CSApp .CSProgressButton {
 	display:grid;
@@ -641,20 +636,17 @@ html:not([dark]):not([fullscreen]) {
 	letter-spacing:.1px;
 }
 #CSApp shortcut {
-	display:flex;
+    display:grid;
+    grid-template-columns:1fr 1fr;
 	margin-bottom:4px;
 }
-#CSApp shortcut label {
-	flex:1;
+#CSApp shortcut title {
+	display:block;
+	grid-row:span 2;
+	width:200px;
 	margin-top:7px;
 }
-#CSApp shortcut edit {
-	display:flex;
-	flex-flow:column;
-	width:180px;
-}
 #CSApp shortcut input {
-	order:0;
 	background-color:var(--cs-comment-count-background);
 	padding:2px 10px;
 	border-radius:3px;
@@ -675,7 +667,7 @@ html:not([dark]):not([fullscreen]) {
 	filter:brightness(.95);
 }
 #CSApp shortcut error {
-	order:1;
+	order:2;
 	display:block;
 	height:20px;
 	font-size:12px;
@@ -685,7 +677,7 @@ html:not([dark]):not([fullscreen]) {
 	white-space:nowrap;
 	text-align:center;
 }
-#CSApp shortcut error:not(:empty) ~ input {
+#CSApp shortcut error:not(:empty) + input {
 	border-bottom-color:var(--cs-error-color);
 }
 #CSApp .CSBasicView {
@@ -712,7 +704,7 @@ html:not([dark]):not([fullscreen]) {
 #CSApp update:hover {
 	background-color:var(--cs-hover-background);
 }
-#CSApp update[data-read="false"] {
+#CSApp update[new] {
 	border-left-color:var(--cs-link-color);
 }
 #CSApp update header {

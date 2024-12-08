@@ -8,11 +8,15 @@
 
 const CC_NON = 0;
 const CC_DIS = -1;
-const CC_GLB = -2;
 
 function none()
 {
 	return null;
+}
+
+function This(This)
+{
+	return This;
 }
 
 function keys(object)
@@ -30,14 +34,23 @@ function entries(object)
 	return Object.entries(object);
 }
 
-function unpack(object)
-{
-	return entries(object).shift();
-}
-
 function assign()
 {
 	return Object.assign(...arguments);
+}
+
+function unpack(pack, ...moreArgs)
+{
+	return [...entries(pack)[0], ...moreArgs];
+}
+
+function pop(pack)
+{
+	let [key, object, val] = unpack(pack, null);
+
+	val = object[key];
+
+	return delete object[key] && val;
 }
 
 function clone(array)
@@ -55,6 +68,8 @@ function match(value, ...cases)
 	for (const [k, v] of cases) {
 		if (k === value) return v;
 	}
+
+	return value;
 }
 
 class is
@@ -82,11 +97,6 @@ class is
 	static object(x)
 	{
 		return this.type(x) == Object;
-	}
-
-	static function(x)
-	{
-		return this.type(x) == Function;
 	}
 
 	static type(x)
@@ -196,7 +206,7 @@ class string
 
 	static isNumeric(s)
 	{
-		return !/[^\d]/.test(s);
+		return /^\d+$/.test(s);
 	}
 
 	static isAlphanum(s)
@@ -346,15 +356,15 @@ class array
 
 class object
 {
-	static from(array, k)
+	static from(arrayOfObjects, k)
 	{
-		const x = {};
+		const o = {};
 
-		for (const o of array) {
-			x[o[k]] = o;
+		for (const item of arrayOfObjects) {
+			o[item[k]] = item;
 		}
 
-		return x;
+		return o;
 	}
 
 	static map(o, callback)
@@ -368,29 +378,18 @@ class object
 		return x;
 	}
 
-	static index(o, k)
-	{
-		const m = new Map;
-
-		values(o).forEach(
-			v => m.set(v[k], v)
-		);
-
-		return m;
-	}
-
 	static filter(o)
 	{
 		for (const k in o) {
-			is.null(o[k]) && delete o[k];
+			null == o[k] && delete o[k];
 		}
 
 		return o;
 	}
 
-	static safeSet(o, items)
+	static safeSet(target, values)
 	{
-		assign(o || {}, this.filter(items));
+		assign(target || {}, this.filter(values));
 	}
 }
 
@@ -449,7 +448,7 @@ class time
 			}
 		}
 
-		return '1 second ago';
+		return !diff ? 'now' : '';
 	}
 
 	static pt2int(pt)
@@ -590,6 +589,17 @@ class math
 
 		return (arr[i--] + arr[i]) / 2;
 	}
+
+	static hashCode(s)
+	{
+		let h = 0;
+
+		for (let i = 0; i < s.length; i++) {
+			h = Math.imul(31, h) + s.charCodeAt(i) | 0;
+		}
+
+		return h;
+	}
 }
 
 class sort
@@ -622,22 +632,9 @@ class sort
 
 class ext
 {
-	static isCachable(n)
-	{
-		return 0 < n && n < 1e3;
-	}
-
-	static isCached(videoId, ttl)
-	{
-		if (ttl) {
-			return mem.cache[videoId] = time.now() + ttl;
-		}
-
-		return !time.expired(mem.cache[videoId]);
-	}
-
 	static file = object.map({
 		view:'/html/view.html',
+		css:'/html/style.css',
 		svg: {
 			auth:'/html/svg/auth.svg',
 		}
@@ -668,15 +665,15 @@ class notifications
 		}
 	}
 
-	static send(pack, confirm)
+	static send(notification)
 	{
-		const [id, data] = unpack(pack);
+		let [id, data, catched] = unpack(notification, 0);
 
 		for (const target of this.getChannel(id)) {
-			confirm |= target[on(id)](data);
+			catched |= target[on(id)](data);
 		}
 
-		return confirm;
+		return catched;
 	}
 
 	static contextInvalidated(isUncaught)
@@ -692,6 +689,23 @@ class notifications
 	}
 
 	static channels = {};
+}
+
+class PendingPromise extends Promise
+{
+	constructor(resolve)
+	{
+		super(e => resolve = e);
+
+		Object.defineProperties(this, {
+			constructor: {
+				value:Promise
+			},
+			resolve: {
+				value:resolve
+			}
+		});
+	}
 }
 
 class Storage
@@ -783,7 +797,7 @@ class AppStorage extends Storage
 			this.items[k] = items[k].newValue;
 
 			notifications.send({
-				[string.format('%sDataChange', k)]:this.items[k]
+				[`${k}DataChange`]:this.items[k]
 			});
 		}
 	}
@@ -796,9 +810,9 @@ class AppStorage extends Storage
 		if (oldVer != newVer)
 		{
 			this.restruct(loaded, {
-				cache:{},
+				pos:null,
 				user:{},
-				pos:{},
+				cache:{},
 				updates:[],
 				installed:time.now(),
 				commands: {
@@ -809,10 +823,6 @@ class AppStorage extends Storage
 					fsClose:[],
 				}
 			});
-
-			if (oldVer && newVer == '24.11.22') {
-				loaded.updates.unshift({type:'changelog', read:false});
-			}
 
 			this.persist(
 				assign(loaded, {ver:newVer})
@@ -859,17 +869,10 @@ class Portable
 		this.didDisconnect = this.DIS_INITIAL;
 	}
 
-	onMessage(kind, data)
+	onMessage(method, data)
 	{
 		if (!this.didDisconnect) {
-			return this[kind](data);
-		}
-	}
-
-	postMessage(message)
-	{
-		if (this.canPost) {
-			this.port.postMessage(message);
+			return this[method](data);
 		}
 	}
 
@@ -878,9 +881,9 @@ class Portable
 		this.didDisconnect = this.DIS_REQUEST;
 	}
 
-	onDisconnect()
+	get id()
 	{
-		this.didDisconnect = this.DIS_TIMEOUT;
+		return this.port.name;
 	}
 
 	onPortMessage(message)
@@ -888,6 +891,11 @@ class Portable
 		this.onMessage(
 			...unpack(message)
 		);
+	}
+
+	onDisconnect()
+	{
+		this.didDisconnect = this.DIS_TIMEOUT;
 	}
 }
 
@@ -900,43 +908,39 @@ class MasterPort extends Portable
 		);
 	}
 
+	onConnect(port)
+	{
+		super.onConnect(port);
+
+		this.workerReady = new PendingPromise;
+	}
+
+	didConnect()
+	{
+		this.workerReady.resolve(true);
+	}
+
+	postMessage(message)
+	{
+		this.canPost && this.workerReady.then(
+			_ => this.port.postMessage(message)
+		);
+	}
+
 	reconnect()
 	{
 		this.onConnect(
 			chrome.runtime.connect({name:this.port.name})
 		);
-
-		this.didReconnect = true;
-	}
-
-	postMessage(message)
-	{
-		let wait = 0;
-
-		if (this.canPost)
-		{
-			if (this.didReconnect) {
-				wait = 50;
-			}
-
-			setTimeout(
-				this.port.postMessage(message), wait
-			);
-
-			this.didReconnect = false;
-		}
 	}
 
 	get canPost()
 	{
-		const reason = this.didDisconnect;
+		if (this.didDisconnect == this.DIS_REQUEST) {
+			return;
+		}
 
-		if (reason)
-		{
-			if (reason == this.DIS_REQUEST) {
-				return;
-			}
-
+		if (this.didDisconnect == this.DIS_TIMEOUT) {
 			this.reconnect();
 		}
 
@@ -951,14 +955,23 @@ class WorkerPort extends Portable
 		super(port);
 	}
 
+	onConnect(port)
+	{
+		super.onConnect(port);
+
+		this.didConnect(true);
+	}
+
 	didConnect(didConnect)
 	{
 		this.postMessage({didConnect});
 	}
 
-	get canPost()
+	postMessage(message)
 	{
-		return !this.didDisconnect;
+		if (!this.didDisconnect) {
+			this.port.postMessage(message);
+		}
 	}
 }
 
@@ -988,9 +1001,9 @@ class Main
 
 	onMessage(message, sender, callback)
 	{
-		const [kind, data] = unpack(message);
+		const [id, data] = unpack(message);
 
-		this[on(kind)]?.(
+		this[on(id)]?.(
 			data, sender.tab, callback
 		);
 	}
@@ -1086,33 +1099,77 @@ class UIResponder
 		this.parent = parent;
 	}
 
-	handleEvent(event, sender = this)
+	handleEvent(e, sender)
 	{
-		if (sender != this)
-		{
-			if (event in this) {
-				return this[event](sender);
-			}
+		const event = e.name;
 
-			if (this.onEvent) {
-				return this.onEvent(event, sender);
-			}
+		if (event in this) {
+			return this[event](e, sender);
 		}
 
-		this.superview?.handleEvent(event, sender);
+		if (this.onAnyEvent) {
+			return this.onAnyEvent(event, e, sender);
+		}
+
+		if (this.sendAction(e)) {
+			return;
+		}
+
+		this.superview?.handleEvent(e, sender);
 	}
 
-	handleAction(action, sender = this, data)
+	handleAction(action, data, sender)
 	{
 		let nextResponder;
+
+		if (!sender) {
+			[action, data, sender] = unpack(action, this);
+		}
 
 		if (action in this && this != sender) {
 			return this[action](sender, data);
 		}
 
 		if (nextResponder = this.parent || this.superview) {
-			return nextResponder.handleAction(action, sender, data);
+			return nextResponder.handleAction(action, data, sender);
 		}
+	}
+
+	nativeEventHandler(e)
+	{
+		e.stopPropagation();
+
+		this.generateChainOfEvents(e).forEach(
+			event => this.handleEvent(event, this)
+		);
+	}
+
+	generateChainOfEvents(e)
+	{
+		const arr = [e];
+
+		if (e.type == 'keydown' && e.key == 'Enter' && !e.shiftKey) {
+			e.name = 'enter';
+		}
+
+		if (e.type == 'input')
+		{
+			const value = e.data;
+
+			if (e.inputType == 'insertFromPaste') {
+				arr.push({name:'paste', value});
+			}
+
+			if (e.inputType == 'insertFromDrop') {
+				arr.push({name:'drop', value});
+			}
+		}
+
+		arr.forEach(
+			e => e.name = on(e.name || e.type)
+		);
+
+		return arr;
 	}
 }
 
@@ -1128,30 +1185,6 @@ class UIFactory
 
 			this.protos[id] = proto.outerHTML;
 		}
-	}
-
-	create({source, native}, data)
-	{
-		const html = this.protos[source];
-
-		if (html) {
-			return this.createFromSource(html, data);
-		}
-
-		if (native) {
-			return document.createElement(native);
-		}
-
-		return document.createElement(source);
-	}
-
-	textNode(text)
-	{
-		const x = document.createElement('span');
-
-		x.textContent = text;
-
-		return x;
 	}
 
 	extend(a, b)
@@ -1181,13 +1214,28 @@ class UIFactory
 		return a;
 	}
 
-	createFromSource(html, data)
+	create({source, native, ...init})
 	{
-		if (data) {
-			html = string.replace(html, data);
+		const html = this.protos[source];
+
+		if (html) {
+			return this.convert(string.replace(html, init));
 		}
 
-		return this.convert(html);
+		if (native) {
+			return document.createElement(native);
+		}
+
+		return document.createElement(source);
+	}
+
+	element(name, text)
+	{
+		const x = document.createElement(name);
+
+		x.textContent = text;
+
+		return x;
 	}
 
 	convert(html)
@@ -1200,37 +1248,110 @@ class UIFactory
 	}
 }
 
+class UIData
+{
+	constructor(data)
+	{
+        this.targets = [];
+
+		setTimeout(
+			_ => this.didInit = true
+		);
+
+		return new Proxy(this,
+		{
+			get(self, k)
+			{
+				if (k in self) {
+					return self[k].bind(self);
+				}
+
+				return data[k];
+            },
+
+			set(self, k, v)
+			{
+				if (!self.didInit) {
+					return 1;
+				}
+
+                return self.set(k, v, data) | 1;
+			},
+
+			has(self, k)
+			{
+				return k in data;
+			},
+
+            ownKeys()
+            {
+                return keys(data);
+            },
+
+            getOwnPropertyDescriptor()
+            {
+                return {enumerable:true, configurable:true};
+            }
+		});
+	}
+
+	set(k, v, data)
+    {
+		if (this.isEqual(data[k], v)) {
+			return;
+		}
+
+        data[k] = v;
+
+		this.targets.forEach(
+			target => target.onDataChange({id:data.id, [k]:v})
+		);
+    }
+
+    addListener(target)
+    {
+        this.targets.push(target);
+    }
+
+	isEqual(a, b)
+	{
+		return JSON.stringify(a) == JSON.stringify(b);
+	}
+}
+
 class UIView extends UIResponder
 {
 	constructor(init)
 	{
 		super();
 
-		this.superview;
+		this.property = {};
 		this.subviews = [];
-		this.targets = new Map;
+		this.targets = {};
 
-		this.setElement(init) & this.init(init);
-	}
-
-	setElement(init)
-	{
-		this.element = UI.create({
-			source:init.source || this.constructor.name,
-			native:init.native
-		}, init.data);
+		this.element = UI.create(
+			{source:this.constructor.name, ...init}
+		);
 
 		this.import(
-			'style dataset attributes hidden remove textContent querySelector querySelectorAll addEventListener'
+			'style hidden remove textContent querySelector querySelectorAll addEventListener'
 		);
+
+		this.init(init);
 	}
 
 	init(init)
 	{
-		this.data = init.data;
+		let skip = string.split('source native data styles import events attrib target text superview'),
+			attr = string.split(init.attrib || ''),
+			data = init.data || {};
 
-		if (init.delegate) {
-			this.delegate = init.delegate;
+		for (const k of attr) {
+			init[k] ??= null;
+		}
+
+		if (init.data) {
+			assign(init, this.data = data) & data.addListener(this);
 		}
 
 		if (init.import) {
@@ -1246,17 +1367,47 @@ class UIView extends UIResponder
 		}
 
 		if (init.target) {
-			this.addTarget(...init.target);
-		}
-
-		if (init.attrs) {
-			for (const k in init.attrs) {
-				init.attrs[k] && this.setAttribute(k, init.attrs[k]);
-			}
+			this.setTargets(...init.target);
 		}
 
 		if (init.text) {
 			this.textContent = init.text;
+		}
+
+		for (const k in init)
+		{
+			let ignore = skip.includes(k),
+				isAttr = attr.includes(k),
+				isData = (k in data),
+				inThis = (k in this);
+
+			if (ignore) {
+				continue;
+			}
+
+			if (isAttr || isData && !inThis)
+			{
+				Object.defineProperty(this, k,
+				{
+					get() {
+						return this.property[k];
+					},
+
+					set(v) {
+						if (isAttr) {
+							this.attr[k] = v;
+						}
+
+						if (isData) {
+							this.data[k] = v;
+						}
+
+						this.property[k] = v;
+					}
+				});
+			}
+
+			this[k] = init[k];
 		}
 
 		this.didInit(init);
@@ -1267,25 +1418,23 @@ class UIView extends UIResponder
 		superview?.at(0).addSubview(this, superview[1]);
 	}
 
-	appendChild(child)
+	onDataChange(o)
 	{
-		this.element.appendChild(child.element || child);
+		assign(this, o);
 	}
 
-	setAttribute(key, val)
+	append(nameText)
 	{
-		const el = this.element;
+		const [name, text] = unpack(nameText);
 
-		if (is.bool(val))
-		{
-			if (!val) {
-				return el.removeAttribute(key);
-			}
+		return this.appendChild(
+			UI.element(name, text)
+		);
+	}
 
-			val = '';
-		}
-
-		el.setAttribute(key, val);
+	appendChild(child)
+	{
+		return this.element.appendChild(child.element || child);
 	}
 
 	addClass(s)
@@ -1302,19 +1451,16 @@ class UIView extends UIResponder
 		);
 	}
 
-	condClass(s, cond)
-	{
-		cond ? this.addClass(s) : this.delClass(s);
-	}
-
 	tempClass(s, ms)
 	{
 		this.addClass(s) & setTimeout(_ => this.delClass(s), ms);
 	}
 
-	addStyles(p)
+	setStyles(obj, unit = '')
 	{
-		assign(this.style, p);
+		for (const k in obj) {
+			this.style[k] = obj[k] + unit;
+		}
 	}
 
 	addSubview(view, targetId)
@@ -1357,11 +1503,6 @@ class UIView extends UIResponder
 		this.superview?.removeSubview(this);
 	}
 
-	bringSubviewToFront(view)
-	{
-		this.appendChild(view);
-	}
-
 	clear()
 	{
 		clone(this.subviews).forEach(
@@ -1384,62 +1525,67 @@ class UIView extends UIResponder
 		return this.element.getBoundingClientRect();
 	}
 
-	addListener(events)
+	get attr()
 	{
-		const handler = this.eventHandler.bind(this);
-
-		for (const event of string.split(events))
+		return this.attr_ ??= new Proxy(this.element,
 		{
-			this.addEventListener(event, handler);
-		}
+			get(el, k)
+			{
+				const v = el.attributes[k]?.value;
+
+				if (v == '') {
+					return true;
+				}
+
+				return v;
+			},
+
+			set(el, k, v)
+			{
+				if (v) {
+					el.setAttribute(k, v === true ? '' : v);
+				}
+				else {
+    				el.removeAttribute(k);
+				}
+
+                return true;
+			}
+		});
 	}
 
-	addTarget(target, events)
+	addListener(events)
+	{
+		const handler = this.nativeEventHandler.bind(this);
+
+		string.split(events).forEach(
+			event => this.addEventListener(event, handler)
+		);
+	}
+
+	setTargets(target, events)
 	{
 		events = string.split(events);
 
 		for (const eventAction of events)
 		{
-			const [event, action] = eventAction.split(':');
+			let [event, action] = eventAction.split(':');
 
-			this.targets.set(event, [target, action]);
+			if (!action) {
+				action = event;
+			}
+
+			this.targets[event] = [target, action];
 		}
 	}
 
-	sendAction(event)
+	sendAction(e)
 	{
-		const [target, action] = this.targets.get(event) || [];
+		const [target, action] = this.targets[e.name] ?? [];
 
 		if (target) {
-			return target.handleAction(action, this);
+			return !void target.handleAction(action, e, this);
 		}
-
-		this.handleEvent(event);
-	}
-
-	eventHandler(e)
-	{
-		const event = on(e.type);
-
-		if (event in this) {
-			this[event](e);
-		}
-		else {
-			this.sendAction(event);
-		}
-
-		e.stopPropagation();
-	}
-
-	destruct()
-	{
-		this.removeFromSuperview();
-
-		clone(this.subviews).forEach(
-			view => view.destruct()
-		);
-
-		this.targets.clear();
 	}
 
 	import(s)
@@ -1468,189 +1614,16 @@ class UIView extends UIResponder
 
 		Object.defineProperties(this, p);
 	}
-}
 
-class UIText extends UIView
-{
-	constructor(text)
+	destruct()
 	{
-		super({text});
-	}
-}
+		this.removeFromSuperview();
 
-class UIResizeBar extends UIView
-{
-	constructor(resize)
-	{
-		super({
-			events:'pointerdown',
-			attrs: {
-				resize
-			}
-		});
-	}
-
-	onPointerdown(e)
-	{
-		const p = e.target.attributes.resize.value;
-
-		if (e.which != 1) {
-			return;
-		}
-
-		this.handleAction('resizeBarClicked', this, {
-			startX:e.clientX,
-			startY:e.clientY,
-			isMove:p.includes('we'),
-			resizeL:p.includes('w'),
-			resizeR:p.includes('e'),
-			resizeT:p.includes('n'),
-		});
-	}
-}
-
-class UIWindow extends UIView
-{
-	constructor(width, height)
-	{
-		const url = chrome.runtime.getURL('/');
-
-		super({
-			data:{url},
-			width:width,
-			height:height,
-		});
-
-		this.minWidth = width;
-		this.minHeight = 56;
-	}
-
-	didInit(init)
-	{
-		const [w, h] = [init.width, init.height];
-
-		const x = window.innerHeight - h;
-		const y = window.innerWidth - w - 100;
-
-		this.addStyles({
-			top:x + 'px',
-			left:y + 'px',
-			minWidth:w + 'px',
-		});
-
-		string.split('w e n ne nw we').forEach(
-			p => this.addSubview(new UIResizeBar(p))
+		clone(this.subviews).forEach(
+			view => view.destruct()
 		);
 
-		super.didInit(init);
-	}
-
-	setPosition(props)
-	{
-		for (const k in props)
-		{
-			this.style[k] = props[k] + (k == 'top' ? 'vh' : 'vw');
-		}
-	}
-
-	resizeBarClicked(sender, data)
-	{
-		if (data.isMove) {
-			return this.onMoveStart(data.startX);
-		}
-
-		this.onResizeStart(data);
-	}
-
-	onResizeStart(data)
-	{
-		const {startX, startY, resizeR, resizeL, resizeT} = data;
-
-		const
-			rect = this.rect,
-			minWidth = this.minWidth,
-			minHeight = this.minHeight,
-			winRightX = window.innerWidth,
-			maxTop = window.innerHeight - minHeight,
-			startL = rect.x,
-			startT = rect.y,
-			startW = rect.width;
-
-		let deltaX = 0,
-			deltaY = 0,
-			finalT = startT,
-			finalL = startL,
-			finalW = startW;
-
-		this.onManipulation(e =>
-		{
-			deltaX = e.clientX - startX;
-			deltaY = e.clientY - startY;
-
-			if (resizeT) {
-				finalT = math.bound(startT + deltaY, [0, maxTop]);
-			}
-
-			if (resizeR)
-			{
-				finalW = math.bound(startW + deltaX, [minWidth]);
-
-				if (winRightX < e.clientX) {
-					finalW = winRightX - startL;
-				}
-			}
-
-			if (resizeL)
-			{
-				finalL = math.bound(startL + deltaX, [0]);
-				finalW = math.bound(startW - deltaX, [minWidth]);
-
-				if (finalL == 0) {
-					finalW = startL + startW;
-				}
-
-				if (finalW == minWidth) {
-					finalL = startL + (startW - finalW);
-				}
-			}
-
-			this.addStyles({
-				top:finalT + 'px',
-				left:finalL + 'px',
-				width:finalW + 'px',
-			});
-		});
-	}
-
-	onMoveStart(startX)
-	{
-		const startL =  this.rect.left;
-
-		this.onManipulation(
-			e => this.style.left = startL + (e.clientX - startX) + 'px'
-		);
-	}
-
-	onManipulation(pointerMoveFn)
-	{
-		dom.handleMoveEvent(pointerMoveFn).then(
-			_ => this.onManipulationEnd()
-		);
-	}
-
-	onManipulationEnd()
-	{
-		const rect = this.rect;
-
-		if (rect.width == 0) {
-			return;
-		}
-
-		this.delegate.didResize({
-			top:math.pct(rect.y, window.innerHeight),
-			left:math.pct(rect.x, window.innerWidth),
-			width:math.pct(rect.width, window.innerWidth),
-		});
+		this.targets = null;
 	}
 }
 
@@ -1685,6 +1658,11 @@ class UIScrollView extends UIView
 		}
 	}
 
+	scrollToTop()
+	{
+		this.scrollTop = 0;
+	}
+
 	scrollToBottom()
 	{
 		this.scrollTop = this.scrollHeight;
@@ -1708,7 +1686,6 @@ class UITableView extends UIScrollView
 		super({});
 
 		this.dataSource = dataSource;
-
 		this.nextChildNodes = [];
 	}
 
@@ -1720,7 +1697,6 @@ class UITableView extends UIScrollView
 		this.clear();
 		this.loadNextBatch();
 		this.pushNextBatch();
-
 		this.setOverscroll();
 	}
 
@@ -1742,61 +1718,81 @@ class UITableView extends UIScrollView
 	}
 }
 
-class UIImage extends UIView
+class UIStackView extends UIView
 {
-	constructor(init)
+	preSegue()
 	{
-		UI.extend(init, {
-			native:'img',
-			import:'src',
-			events:'error',
-			attrs: {
-				src: init.imageUrl
+		this.subviews.slice(0, -1).forEach(
+			view => view.style.opacity = 0
+		);
+
+		this.didPreSegue = this.fadeState(1) | 1;
+	}
+
+	segue(view, scrollTop)
+	{
+		const didPreSegue = pop({didPreSegue:this});
+		const viewChanged = view != this.top;
+
+		if (!didPreSegue)
+		{
+			if (viewChanged) {
+				return this.fullSegue(view, scrollTop);
 			}
-		});
 
-		super(init);
-	}
-
-	didInit(init)
-	{
-		this.fallbackUrl = init.fallbackUrl;
-
-		super.didInit(init);
-	}
-
-	onError()
-	{
-		if (this.fallbackUrl) {
-			(this.src = this.fallbackUrl) & (this.fallbackUrl = null);
+			return;
 		}
+
+		if (viewChanged) {
+			this.appendChild(view) & array.move(this.subviews, view);
+		}
+
+		if (scrollTop) {
+			view.scrollToTop();
+		}
+
+		this.fadeState(0);
+	}
+
+	fullSegue(view, scrollTop)
+	{
+		this.preSegue() & this.segue(view, scrollTop);
+	}
+
+	fadeState(out)
+	{
+		let frames = [
+			{opacity:0},
+			{opacity:1},
+		];
+
+		if (out) {
+			frames = frames.reverse();
+		}
+
+		this.top.element.animate(frames, {duration:150, fill:'forwards'});
+	}
+
+	get top()
+	{
+		return this.subviews.at(-1);
 	}
 }
 
-class UIInput extends UIView
+class UITextInput extends UIView
 {
 	constructor(init)
 	{
 		UI.extend(init, {
 			native:'input',
-			import:'name placeholder focus select blur',
+			import:'focus select blur',
 			events:'focus keydown input blur',
-			attrs: {
-				name:init.name,
-				placeholder:init.placeholder,
-				spellcheck:'false',
-				autocomplete:'off',
-			}
+			attrib:'name placeholder spellcheck autocomplete',
+			spellcheck:'false',
+			autocomplete:'off',
 		});
 
 		super(init);
-	}
-
-	didInit(init)
-	{
-		this.value = init.value;
-
-		super.didInit(init);
 	}
 
 	get value()
@@ -1814,129 +1810,9 @@ class UIInput extends UIView
 		return String.raw`${this.value}`;
 	}
 
-	get flush()
+	caretEnd()
 	{
-		const s = this.value;
-
-		this.value = '';
-
-		this.sendAction('onChange');
-
-		return s;
-	}
-
-	onKeydown(e)
-	{
-		if (e.key == 'Enter' && !e.shiftKey) {
-			return this.sendAction('onEnter');
-		}
-
-		this.sendAction('onKeydown');
-	}
-
-	onInput(e)
-	{
-		this.sendAction('onChange');
-
-		if (e.inputType == 'insertFromPaste') {
-			this.sendAction('onPaste');
-		}
-	}
-
-	onFocus()
-	{
-		this.sendAction('onFocus');
-	}
-}
-
-class UITextArea extends UIInput
-{
-	constructor(init)
-	{
-		UI.extend(init, {
-			native:'textarea'
-		});
-
-		super(init);
-	}
-
-	get value()
-	{
-		return super.value.replace(/\n\s*\n/g, '\n\n');
-	}
-
-	set value(s)
-	{
-		super.value = s;
-	}
-}
-
-class UIProgressInput extends UIView
-{
-	didInit(init)
-	{
-		this.validator = init.validator;
-
-		this.input = new UIInput({
-			placeholder:init.placeholder,
-			superview:[this, 'textInput']
-		});
-
-		this.progressBar = new UIProgressBar({
-			superview:[this, 'textInput']
-		});
-
-		this.messageText = new UIView({
-			styles:'CSApiKeyInputLog',
-			superview:[this]
-		});
-
-		super.didInit(init);
-	}
-
-	get value()
-	{
-		return this.input.value;
-	}
-
-	focus()
-	{
-		this.input.focus();
-	}
-
-	setState(state, message)
-	{
-		this.state = state;
-
-		this.progressBar.setState(state);
-
-		this.messageText.textContent = message;
-	}
-
-	onEvent(event)
-	{
-		if (this.state == 'loading') {
-			return;
-		}
-
-		if (event == 'onChange') {
-			this.setState('normal');
-		}
-
-		if ('onPaste onEnter'.includes(event))
-		{
-			const [pattern, message] = this.validator;
-
-			if (!this.value) {
-				return;
-			}
-
-			if (!pattern.test(this.value)) {
-				return this.setState('error', message);
-			}
-		}
-
-		this.sendAction(event);
+		this.element.setSelectionRange(1e3, 1e3);
 	}
 }
 
@@ -1945,25 +1821,10 @@ class UIControl extends UIView
 	constructor(init)
 	{
 		UI.extend(init, {
-			import:'disabled',
 			events:'click',
 		});
 
 		super(init);
-	}
-
-	didInit(init)
-	{
-		if (init.state) {
-			this[init.state] = true;
-		}
-
-		super.didInit(init);
-	}
-
-	onClick()
-	{
-		this.sendAction('onClick');
 	}
 }
 
@@ -2000,32 +1861,55 @@ class UIToggle extends UIButton
 	constructor(init)
 	{
 		UI.extend(init, {
-			attrs: {
-				active: init.active
-			}
+			attrib:'active'
 		});
 
 		super(init);
 	}
 
-	get isActive()
-	{
-		return !!this.attributes.active;
-	}
-
-	set isActive(bool)
-	{
-		this.setAttribute('active', bool);
-	}
-
 	toggleActive()
 	{
-		return this.isActive = !this.isActive;
+		return this.active = !this.active;
 	}
 
-	onClick()
+	onClick(e)
 	{
-		this.toggleActive() & super.onClick();
+		this.toggleActive() &
+			this.sendAction(e);
+	}
+}
+
+class UIImage extends UIView
+{
+	constructor(init)
+	{
+		UI.extend(init, {
+			native:'img',
+			events:'load error',
+			attrib:'src loaded',
+		});
+
+		super(init);
+	}
+
+	onLoad()
+	{
+		this.loaded = true;
+	}
+
+	onError()
+	{
+		if (this.alterSrc) {
+			this.src = pop({alterSrc:this});
+		}
+	}
+}
+
+class UIText extends UIView
+{
+	constructor(text)
+	{
+		super({text});
 	}
 }
 
@@ -2034,21 +1918,145 @@ class UIAnchor extends UIView
 	constructor(init)
 	{
 		UI.extend(init, {
+			native:'a',
 			events:'click',
-			attrs: {
-				href: init.href
-			}
+			attrib:'href',
 		});
 
 		super(init);
+	}
+
+	didInit(init)
+	{
+		this.attr.target = '_blank';
+
+		super.didInit(init);
+	}
+}
+
+class UIResizeBar extends UIView
+{
+	constructor(resize)
+	{
+		super({
+			events:'pointerdown',
+			attrib:'resize',
+			resize,
+		});
+	}
+
+	onPointerdown(e)
+	{
+		const p = this.resize;
+
+		if (e.which != 1) {
+			return;
+		}
+
+		this.superview.onResizeBarHold({
+			startX:e.clientX,
+			startY:e.clientY,
+			isMove:p.includes('we'),
+			resizeL:p.includes('w'),
+			resizeR:p.includes('e'),
+			resizeT:p.includes('n'),
+		});
 	}
 }
 
 class UIProgressBar extends UIView
 {
-	setState(state)
+	constructor(init)
 	{
-		this.setAttribute('state', state);
+		UI.extend(init, {
+			native:'progress-bar',
+			attrib:'state',
+		});
+
+		super(init);
+	}
+
+	get loading()
+	{
+		this.state = 'loading';
+	}
+
+	get fadeout()
+	{
+		this.element.animate([
+			{opacity:1},
+			{opacity:0},
+		],{
+			duration:200
+		})
+		.finished.then(_ =>
+			this.state = 'initial'
+		);
+	}
+}
+
+class UIProgressInput extends UIView
+{
+	didInit(init)
+	{
+		this.input = new UITextInput({
+			placeholder:init.placeholder,
+			superview:[this]
+		});
+
+		this.progressBar = new UIProgressBar({
+			superview:[this]
+		});
+
+		this.messageText = new UIView({
+			native:'text',
+			superview:[this]
+		});
+
+		super.didInit(init);
+	}
+
+	get value()
+	{
+		return this.input.value;
+	}
+
+	focus()
+	{
+		this.input.focus();
+	}
+
+	setState(state, message)
+	{
+		this.state = state;
+		this.progressBar.state = state;
+		this.messageText.textContent = message;
+	}
+
+	onAnyEvent(name, e, sender)
+	{
+		if (this.state == 'loading') {
+			return;
+		}
+
+		if (name == 'onInput') {
+			this.setState('initial');
+		}
+
+		if ('onPaste.onEnter'.includes(name))
+		{
+			const [pattern, message] = this.validator;
+
+			if (!this.value) {
+				return;
+			}
+
+			if (!pattern.test(this.value)) {
+				return this.setState('error', message);
+			}
+		}
+
+		this.sendAction(e);
 	}
 }
 
@@ -2083,10 +2091,6 @@ class ViewController extends UIResponder
 
 	setModel(model, modelDelegate)
 	{
-		if (is.function(model)) {
-			model = new model;
-		}
-
 		if (modelDelegate) {
 			model.delegate = modelDelegate(this);
 		}
@@ -2096,12 +2100,10 @@ class ViewController extends UIResponder
 		);
 	}
 
-	viewDidSet(view)
-	{
+	viewDidSet(view) {
 	}
 
-	modelDidSet(model)
-	{
+	modelDidSet(model) {
 	}
 
 	viewWillAppear(sender)
@@ -2203,9 +2205,9 @@ class NavViewController extends ViewController
 		this.backBtn = new UIButton({
 			styles:'CSNavButton CSBackButton',
 			image:'UIIconArrowLeft',
-			state:'hidden',
 			target:[this, 'onClick:removeChild'],
-			superview:[view]
+			superview:[view],
+			hidden:true,
 		});
 	}
 
@@ -2271,13 +2273,11 @@ class AppController extends NavViewController
 	constructor()
 	{
 		super(
-			new UIWindow(460, 540), AppViewDelegate
+			new UIAppView(460, 56), This
 		);
 
-		this.setModel(AppModel);
-
 		notifications.addListener(this,
-			'command userTrialRequest userDidAuth contextInvalidated'
+			'command userAuth contextInvalidated'
 		);
 	}
 
@@ -2293,7 +2293,7 @@ class AppController extends NavViewController
 		});
 
 		if (mem.user.key) {
-			this.onUserDidAuth();
+			this.onUserAuth(true);
 		}
 		else {
 			this.onAuthRequired();
@@ -2302,11 +2302,33 @@ class AppController extends NavViewController
 		this.observeContext(view);
 	}
 
-	modelDidSet()
+	viewWillAppear()
 	{
-		this.view.setPosition(
-			this.model.getPosition()
-		);
+		super.viewWillAppear();
+
+		this.view.setPosition();
+	}
+
+	getPosition()
+	{
+		return mem.pos || {
+			x:innerWidth - 460 - 100,
+			y:0,
+			w:460,
+			h:540,
+		};
+	}
+
+	didPosition()
+	{
+		const rect = this.view.rect;
+
+		mem.pos = {
+			x:rect.x,
+			y:rect.y,
+			w:rect.width,
+			h:rect.height,
+		};
 	}
 
 	onCommand(c)
@@ -2317,7 +2339,7 @@ class AppController extends NavViewController
 
 		if (c == 'close' || c == 'fsClose')
 		{
-			if (!this.isVisible || c == 'fsClose' && !YT.isFullscreen) {
+			if (!this.isVisible || c == 'fsClose' && !dom.isFullscreen) {
 				return;
 			}
 
@@ -2325,27 +2347,22 @@ class AppController extends NavViewController
 		}
 	}
 
-	onUserTrialRequest()
-	{
-		this.showSearchView(true);
-	}
-
-	onUserDidAuth()
-	{
-		this.showSearchView(false);
-	}
-
 	onAuthRequired()
 	{
 		this.addChild(
-			new AuthView(this.trialMode = false)
+			new AuthView(this.didAuth = false)
 		);
 	}
 
-	showSearchView(trialMode)
+	onUserAuth(didAuth)
+	{
+		this.showSearchView(didAuth);
+	}
+
+	showSearchView(didAuth)
 	{
 		this.addChild(
-			new SearchView(this.trialMode = trialMode)
+			new SearchView(this.didAuth = didAuth)
 		);
 	}
 
@@ -2379,7 +2396,7 @@ class AppController extends NavViewController
 
 		this.viewDidDisappear(sender);
 
-		if (this.trialMode) {
+		if (!this.didAuth) {
 			this.onAuthRequired();
 		}
 	}
@@ -2419,32 +2436,138 @@ class AppController extends NavViewController
 	}
 }
 
-class AppModel
+class UIAppView extends UIView
 {
-	getPosition()
+	constructor(minWidth, minHeight)
 	{
-		return mem.pos;
+		super({
+			style:ext.file.css,
+			minWidth,
+			minHeight,
+		});
 	}
 
-	setPosition(css)
+	didInit(init)
 	{
-		(css.width > 100) && (css.width = 100);
+		events.addListener({resize:window},
+			_ => this.setPosition()
+		);
 
-		(css.left < 0) && (css.left = 0);
+		string.split('w e n ne nw we').forEach(
+			resize => this.addSubview(new UIResizeBar(resize))
+		);
 
-		(css.left + css.width > 100) && (css.left = 100 - css.width);
-
-		mem.pos = css;
+		super.didInit(init);
 	}
-}
 
-function AppViewDelegate(self)
-{
-	return {
-		didResize(css)
-		{
-			self.model.setPosition(css);
+	setPosition()
+	{
+		let {w, h, x, y} = this.delegate.getPosition();
+
+		w = math.bound(w, [this.minWidth, innerWidth]);
+		x = math.bound(x, [0, innerWidth - w]);
+		y = math.bound(innerHeight - h, [0]);
+
+		this.setStyles({
+			top:y,
+			left:x,
+			width:w,
+			minWidth:this.minWidth,
+		}, 'px');
+	}
+
+	onResizeBarHold(data)
+	{
+		if (data.isMove) {
+			return this.onMoveStart(data.startX);
 		}
+
+		this.onResizeStart(data);
+	}
+
+	onResizeStart(data)
+	{
+		const {startX, startY, resizeR, resizeL, resizeT} = data;
+
+		const
+			rect = this.rect,
+			minWidth = this.minWidth,
+			minHeight = this.minHeight,
+			winRightX = window.innerWidth,
+			maxTop = window.innerHeight - minHeight,
+			startL = rect.x,
+			startT = rect.y,
+			startW = rect.width;
+
+		let deltaX = 0,
+			deltaY = 0,
+			finalT = startT,
+			finalL = startL,
+			finalW = startW;
+
+		this.onManipulation(e =>
+		{
+			deltaX = e.clientX - startX;
+			deltaY = e.clientY - startY;
+
+			if (resizeT) {
+				finalT = math.bound(startT + deltaY, [0, maxTop]);
+			}
+
+			if (resizeR)
+			{
+				finalW = math.bound(startW + deltaX, [minWidth]);
+
+				if (winRightX < e.clientX) {
+					finalW = winRightX - startL;
+				}
+			}
+
+			if (resizeL)
+			{
+				finalL = math.bound(startL + deltaX, [0]);
+				finalW = math.bound(startW - deltaX, [minWidth]);
+
+				if (finalL == 0) {
+					finalW = startL + startW;
+				}
+
+				if (finalW == minWidth) {
+					finalL = startL + (startW - finalW);
+				}
+			}
+
+			this.setStyles({
+				top:finalT,
+				left:finalL,
+				width:finalW,
+			}, 'px');
+		});
+	}
+
+	onMoveStart(startX)
+	{
+		const startL =  this.rect.left;
+
+		this.onManipulation(
+			e => this.style.left = startL + (e.clientX - startX) + 'px'
+		);
+	}
+
+	onManipulation(pointerMoveFn)
+	{
+		dom.handleMoveEvent(pointerMoveFn).then(
+			_ => this.onManipulationEnd()
+		);
+	}
+
+	onManipulationEnd()
+	{
+		if (this.hidden) {
+			return;
+		}
+
+		this.delegate.didPosition();
 	}
 }
 
@@ -2462,14 +2585,9 @@ class AuthView extends NavViewController
 		this.addChild(new AuthHelpView);
 	}
 
-	onAuth()
+	onAuth(sender, userAuth)
 	{
-		notifications.send({userDidAuth:null});
-	}
-
-	onTrial()
-	{
-		notifications.send({userTrialRequest:null});
+		notifications.send({userAuth});
 	}
 }
 
@@ -2489,19 +2607,18 @@ class AuthMainView extends ViewController
 		this.keyInput = new UIProgressInput({
 			target:[this, 'onPaste:authUser onEnter:authUser'],
 			validator:[/^[A-Za-z0-9_-]{32,}$/, 'invalid key'],
-			superview:[view, 'keyInput']
+			superview:[view]
 		});
 
 		new UIImage({
-			imageUrl:ext.file.svg.auth,
-			superview:[view, 'artwork']
+			src:ext.file.svg.auth,
+			superview:[view]
 		});
 
 		new UIAnchor({
-			styles:'CSFooterLink',
 			text:'What is Youtube API key?',
 			target:[this, 'onClick:showHelpView'],
-			superview:[view, 'footer']
+			superview:[view]
 		});
 	}
 
@@ -2522,7 +2639,7 @@ class AuthMainView extends ViewController
 	onUserDataChange(user)
 	{
 		if (user.key) {
-			this.handleAction('onAuth');
+			this.handleAction({onAuth:true});
 		}
 	}
 }
@@ -2536,66 +2653,57 @@ class AuthHelpView extends ViewController
 		);
 
 		super(
-			new UIView({source:'UIHelpView', data:{usage}})
+			new UIView({source:'UIHelpView', usage})
 		);
 	}
 
 	viewDidSet(view)
 	{
 		new UIProgressButton({
-			usage:view.data.usage,
+			styles:'CSStickBottom',
 			label:'Try it without key',
 			target:[this, 'onClick:tryButtonClicked'],
-			superview:[view, 'actionBtns'],
+			superview:[view],
+			usage:view.usage,
 		});
 	}
 
 	tryButtonClicked()
 	{
-		this.handleAction('onTrial');
+		this.handleAction({onAuth:false});
 	}
 }
 
 class UIProgressButton extends UIButton
 {
-	constructor(init)
+	onClick(e)
 	{
-		init.data = {
-			label:init.label,
-			usage:init.usage,
-		};
-
-		super(init);
-	}
-
-	onClick()
-	{
-		if (this.data.usage == 0) {
+		if (this.usage == 0) {
 			return this.tempClass('CSWiggle', 500);
 		}
 
-		super.onClick();
+		this.sendAction(e);
 	}
 }
 
 class SearchView extends ViewController
 {
-	constructor(trialMode)
+	constructor(didAuth)
 	{
 		super(
 			new UIView({source:'UISearchView'})
 		);
 
-		this.didAuth = !trialMode;
+		this.didAuth = didAuth;
 
 		notifications.addListener(this, 'command');
 	}
 
 	viewDidSet(view)
 	{
-		this.searchInput = new UIInput({
+		this.searchInput = new UITextInput({
 			placeholder:'type keywords here..',
-			target:[this, 'onFocus:auditContext onEnter:onSubmit onPaste:onPaste onChange:onTyping'],
+			target:[this, 'onFocus:recontext onEnter:onSubmit onInput onDrop onPaste'],
 			superview:[view, 'header']
 		});
 
@@ -2606,13 +2714,17 @@ class SearchView extends ViewController
 
 		this.commentCount = new UICommentCount({
 			styles:'CSCommentCount',
-			value:'0',
-			state:'disabled',
+			attrib:'disabled',
+			disabled:true,
 			target:[this, 'onClick:showFeaturesView'],
 			superview:[view, 'header']
 		});
 
-		this.contentView = new UIView({
+		this.progressBar = new UIProgressBar({
+			superview:[view, 'header']
+		});
+
+		this.contentView = new UIStackView({
 			styles:'CSSearchBody CSViewStack',
 			superview:[view]
 		});
@@ -2625,7 +2737,7 @@ class SearchView extends ViewController
 
 	viewWillAppear()
 	{
-		const updates = mem.updates.some(item => item.read == false);
+		const updates = mem.updates.some(item => item.new);
 
 		if (updates) {
 			this.searchIcons.show({Bell:1e3});
@@ -2634,12 +2746,12 @@ class SearchView extends ViewController
 			this.searchIcons.hide({Bell:400});
 		}
 
-		this.auditContext();
+		this.recontext();
 	}
 
-	viewDidAppear(sender)
+	viewDidAppear()
 	{
-		this.searchInput.focus();
+		this.focusInput();
 	}
 
 	viewDidDisappear()
@@ -2652,7 +2764,7 @@ class SearchView extends ViewController
 	onCommand(c)
 	{
 		if (c == 'start') {
-			return this.searchInput.select();
+			return this.focusInput(true);
 		}
 
 		if (c == 'tsSearch' && YT.isWatchPage) {
@@ -2676,38 +2788,32 @@ class SearchView extends ViewController
 			return this.messageView.showMessage('errNotWatchPage');
 		}
 
-		if (!this.model.available)
-		{
-			if (!this.model.awaitingResponse) {
-				return;
-			}
-
-			if (q == this.model.lastRequestQuery) {
-				return this.messageView.showMessage('errAwaitingResponse');
-			}
-		}
-
 		this.execSearch(q);
+	}
+
+	onInput(e)
+	{
+		this.resultsView.textToHighlight = e.value;
+
+		this.commentCount.toggleTempState(
+			this.isGlobalMode && 'global'
+		);
+
+		this.warmup();
 	}
 
 	onPaste()
 	{
-		if (this.searchIcons.get({Eye:false})?.isActive) {
+		if (this.searchIcons.get({Eye:false})?.active) {
 			return;
 		}
 
 		this.onSubmit();
 	}
 
-	onTyping()
+	onDrop(_, {value})
 	{
-		const s = this.searchInput.value;
-
-		this.commentCount.tempState(
-			s.startsWith('global:') && 'global'
-		);
-
-		this.resultsView.textToHighlight = s;
+		this.autoSearch(value);
 	}
 
 	onBellIconClicked()
@@ -2727,16 +2833,13 @@ class SearchView extends ViewController
 
 	getAllComments()
 	{
-		if (!YT.isWatchPage) {
-			return this.messageView.showMessage('errNotWatchPage');
-		}
-
 		this.autoSearch(':all');
 	}
 
-	showView(view)
+	showView(view, scrollTop)
 	{
-		this.contentView.bringSubviewToFront(view);
+		this.progressBar.fadeout;
+		this.contentView.segue(view, scrollTop);
 	}
 
 	showFeaturesView()
@@ -2757,36 +2860,23 @@ class SearchView extends ViewController
 		return this.present(new view) | 1;
 	}
 
-	auditContext()
-	{
-		const newId = (this.videoId != YT.videoId) && (this.videoId = YT.videoId);
-
-		if (newId)
-		{
-			this.model?.disconnect();
-
-			this.setModel(
-				new SearchModel(newId), SearchModelDelegate
-			);
-		}
-	}
-
-	get nextBatch()
-	{
-		return this.model.nextBatch(25);
-	}
-
 	execSearch(q)
 	{
 		this.model.search(q);
 
-		this.messageView.showMessage('searchRequestSent');
+		if (this.contentView.top != this.messageView) {
+			this.contentView.preSegue();
+		}
+
+		this.progressBar.loading;
 	}
 
 	searchCurrentTime()
 	{
-		this.autoSearch(
-			time.int2hms(YT.player.currentTime)
+		const t = time.int2hms(YT.player.currentTime);
+
+		setTimeout(
+			_ => this.autoSearch(t)
 		);
 	}
 
@@ -2802,9 +2892,8 @@ class SearchView extends ViewController
 	autoSearch(q)
 	{
 		this.searchTerm(q);
-		this.execSearch(q);
-
-		this.searchInput.focus();
+		this.focusInput();
+		this.onSubmit();
 	}
 
 	toggleHighlighting(isCommand)
@@ -2815,139 +2904,132 @@ class SearchView extends ViewController
 			icon.toggleActive();
 		}
 
-		if (icon.isActive) {
+		if (icon.active) {
 			this.searchIcons.show({Eye:0});
 		}
 		else {
 			this.searchIcons.hide({Eye:0});
 		}
 
-		this.resultsView.setHighlightState(icon.isActive);
-		this.searchInput.focus();
+		this.resultsView.setHighlightState(icon.active);
+		this.focusInput();
+	}
+
+	focusInput(select)
+	{
+		const input = this.searchInput;
+
+		if (select) {
+			input.select();
+		}
+		else {
+			input.caretEnd();
+		}
+
+		input.focus();
+	}
+
+	recontext()
+	{
+		const newId = (this.videoId != YT.videoId) && (this.videoId = YT.videoId);
+
+		if (newId)
+		{
+			this.model?.disconnect();
+
+			this.setModel(
+				new SearchModel(newId), SearchModelDelegate
+			);
+		}
+	}
+
+	warmup()
+	{
+		const port = this.model;
+
+		if (!this.didTimeout || !port) {
+			return;
+		}
+
+		if (port.id == YT.videoId) {
+			port.reconnect();
+		}
+		else {
+			this.recontext();
+		}
+
+		this.didTimeout = false;
+	}
+
+	get nextBatch()
+	{
+		return this.model.nextBatch(25);
+	}
+
+	get isGlobalMode()
+	{
+		return this.searchInput.value.startsWith('global:');
 	}
 }
 
 class SearchModel extends MasterPort
 {
-	constructor(videoId)
-	{
-		super(videoId);
-
-		this.lastRequestQuery	= '';
-		this.lastRequestTime	= 0;
-		this.lastResultsTime	= 0;
-		this.minHandlingTime	= 300;
-		this.awaitingResponse	= false;
-		this.lastResultsEmpty	= false;
-		this.lastResults		= [];
-	}
-
-	didConnect(n)
-	{
-		this.delegate.onCommentCount(n);
-	}
-
-	nextBatch(count)
-	{
-		return this.lastResults.splice(0, count);
-	}
-
 	search(q)
 	{
-		this.lockPipe(q);
-
 		this.postMessage({searchRequest:q});
 	}
 
-	get available()
+	nextBatch(size)
 	{
-		return !this.awaitingResponse && this.getTime('lastResultsTime') > 500;
+		return this.lastResults.splice(0, size);
+	}
+
+	onContextLoad(context)
+	{
+		this.delegate.onContextLoad(context);
+	}
+
+	onDisconnect()
+	{
+		super.onDisconnect();
+
+		this.delegate.onTimeout();
 	}
 
 	searchRequest(r)
 	{
-		let delay = 200, count = r.threads.length;
-
-		if (count) {
-			delay = this.minHandlingTime - this.getTime('lastRequestTime');
-		}
-
 		this.lastResults = r.threads;
-		this.lastResultsEmpty = !count;
 
-		setTimeout(
-			_ => this.delegate.onResults(count, r.potential),
-		delay);
-
-		this.releasePipe();
-	}
-
-	commentCount(n)
-	{
-		this.delegate.onCommentCount(n);
+		this.delegate.onResults(r.threads.length);
 	}
 
 	error(errorId)
 	{
-		this.releasePipe();
-
 		this.delegate.onError(errorId);
-	}
-
-	setTime(eventName)
-	{
-		this[eventName] = Date.now();
-	}
-
-	getTime(eventName)
-	{
-		return Date.now() - this[eventName];
-	}
-
-	lockPipe(q)
-	{
-		this.lastRequestQuery = q;
-		this.awaitingResponse = true;
-
-		this.setTime('lastRequestTime');
-	}
-
-	releasePipe()
-	{
-		this.awaitingResponse = false;
-
-		this.setTime('lastResultsTime');
 	}
 }
 
 class UICommentCount extends UIButton
 {
-	constructor(init)
-	{
-		init.import = 'innerHTML firstChild';
-
-		super(init);
-	}
-
 	didInit(init)
 	{
-		this.innerHTML = `<text>${init.value}</text>`;
+		this.curval = 0;
+		this.ticker = this.append({text:0});
 
 		super.didInit(init);
 	}
 
-	get value()
+	set value([value, disabled])
 	{
-		return this.firstChild.textContent;
-	}
+		if (this.inTempState) {
+			return this.mainState = [value, disabled];
+		}
 
-	set value(s)
-	{
-		if (s == this.value) {
+		if (value == this.curval) {
 			return;
 		}
 
-		this.firstChild.animate([
+		this.ticker.animate([
 			{opacity:1},
 			{opacity:0},
 		],{
@@ -2955,39 +3037,43 @@ class UICommentCount extends UIButton
 			duration:240,
 		})
 		.finished.then(anim => {
-			this.firstChild.textContent = s;
-			this.style.width = `${String(s).length}ch`;
+			this.disabled = disabled
+			this.ticker.textContent = value;
+			this.style.width = `${String(value).length}ch`;
 			anim.reverse();
 		});
+
+		this.curval = value;
 	}
 
-	tempState(s)
+	toggleTempState(tempVal)
 	{
-		if (!s) {
-			return this.prevState && assign(this, this.prevState) & (this.prevState = null);
+		if (!tempVal && this.inTempState) {
+			this.value = pop({mainState:this});
 		}
 
-		if (s == this.value) {
-			return;
+		if (tempVal && !this.inTempState)
+		{
+			const mainState = [this.value, this.disabled];
+
+			this.value = [tempVal, true];
+			this.mainState = mainState;
 		}
+	}
 
-		this.prevState = {
-			value:this.value,
-			disabled:this.disabled,
-		};
+	get inTempState()
+	{
+		return !!this.mainState;
+	}
 
-		this.value = s;
-		this.disabled = true;
+	get value()
+	{
+		return this.curval;
 	}
 }
 
 class UISearchIcons extends UIView
 {
-	constructor(init)
-	{
-		super(init);
-	}
-
 	get(nameRender)
 	{
 		const [name, render] = unpack(nameRender);
@@ -3058,34 +3144,24 @@ class UISearchMessageView extends UIView
 		super({styles:'CSDialogMessage', delegate});
 
 		this.messages = {
-			emptyResponse:			'No results match your query',
-			searchRequestSent:		'Searching...',
-			errAwaitingResponse:	'Searching still...',
-			errNotWatchPage:		'You are not watching any video',
-			errEmptyQuery:			'Empty search query',
-			errInvalidRegex:		'Invalid RegExp',
-			errZeroComments:		'No comments to search',
-			errNetwork:				'Network error',
-			errServerDown:			'Service down for maintenance',
-			errRequestTimeout:		'Request timeout',
-			errUnsupportedFeature:	'Feature not supported for this video',
-			errParseError:			'Invalid response from server, try again',
-			errUnknown:				'An unexpected error occured',
-
-			accessNotConfigured:	'Access not configured',
-			rateLimitExceeded:		'Rate limit exceeded',
-			quotaExceeded:			'Quota exceeded',
-			processingFailure:		'Processing failure',
-			videoNotFound:			'Video not found',
-			forbidden:				'Request could not be processed',
-			commentsDisabled:		'Comments are turned off',
+			emptyResponse:		'No results match your query',
+			errNotWatchPage:	'You are not watching any video',
+			errEmptyQuery:		'Empty search query',
+			errInvalidRegex:	'Invalid RegExp',
+			errNoComments:		'No comments to search',
+			errCommentsOff:		'Comments are turned off',
+			errLimitedFeature:	'Feature not available for this video',
+			errServerDown:		'Service down for maintenance',
+			errParsing:			'Invalid response from server',
+			errNetwork:			'You seem to be offline',
+			errUnknown:			'An unexpected error occured',
 		};
 	}
 
 	showMessage(id)
 	{
 		this.setMessage(
-			this.messages[id] || this.messages.errUnknown
+			this.messages[id] || string.grep(/^\w+$/, id) || this.messages.errUnknown
 		);
 	}
 
@@ -3123,7 +3199,7 @@ class UISearchResultsView extends UITableView
 
 	setVideoTime(sender)
 	{
-		YT.playerSetCurrentTime(sender.data.startAt);
+		YT.playerSetCurrentTime(sender.startAt);
 	}
 
 	pauseInlinePlayer()
@@ -3133,29 +3209,18 @@ class UISearchResultsView extends UITableView
 
 	setHighlightState(bool)
 	{
-		this.highlight = bool;
-
-		if (bool) {
-			this.highlightText();
-		}
-		else {
-			this.unhighlightText();
-		}
+		this.highlightText(
+			(this.highlight = bool) ? this.userText : null
+		);
 	}
 
 	set textToHighlight(s)
 	{
-		this.textToHighlight_ = s;
+		this.userText = s;
 
-		if (!this.highlight) {
-			return;
+		if (this.highlight) {
+			this.highlightText(s);
 		}
-
-		if (!s) {
-			return this.unhighlightText();
-		}
-
-		this.highlightText();
 	}
 
 	renderNextBatch(threads)
@@ -3199,75 +3264,64 @@ class UISearchResultsView extends UITableView
 	{
 		super.addSubviews(views, targetId);
 
-		this.highlight &&
-			this.highlightText();
+		if (this.highlight) {
+			this.highlightText(this.userText);
+		}
 	}
 
-	highlightText()
+	highlightText(s)
 	{
-		const r = regex.create('/%s/gi', this.textToHighlight_);
+		const nodes = this.querySelectorAll('text > s');
 
-		this.highlightable.forEach(
-			el => el.innerHTML = el.textContent.replace(r, m => `<mark>${m}</mark>`)
-		);
-	}
+		if (!s) {
+			nodes.forEach(el => el.textContent = el.textContent);
+		}
+		else {
+			const r = regex.create('/%s/gi', s);
 
-	unhighlightText()
-	{
-		this.highlightable.forEach(
-			el => el.textContent = el.textContent
-		);
-	}
-
-	get highlightable()
-	{
-		return this.querySelectorAll('text > span');
+			nodes.forEach(
+				el => el.innerHTML = el.textContent.replace(r, m => `<mark>${m}</mark>`)
+			);
+		}
 	}
 }
 
 class UIComment extends UIView
 {
-	constructor(comment)
+	constructor(init)
 	{
-		super({data:comment});
+		UI.extend(init, {
+			attrib:'isReply isChained isUploader'
+		});
+
+		super(init);
 	}
 
 	didInit(init)
 	{
-		const comment = init.data;
-
-		for (const k in comment)
-		{
-			(comment[k] === true) &&
-				this.setAttribute(k, true);
-		}
-
-		this.renderImageView(comment);
-		this.renderTextView(comment);
+		this.renderImageView(init);
+		this.renderTextView(init);
 
 		super.didInit(init);
 	}
 
-	embedVideo(sender)
+	embedVideo({videoId, startAt})
 	{
-		const {videoId, startAt} = sender.data;
-
 		this.addSubview(
-			this.handleAction('onEmbedRequest').load(videoId, startAt), 'main'
+			this.handleAction({onEmbedRequest:0}).load(videoId, startAt)
 		);
 	}
 
 	renderImageView(comment)
 	{
 		const imageUrl = comment.authorImgUrl;
-
 		const largeUrl = imageUrl.replace(
 			/=s\d+/, string.format('=s%s', comment.isReply ? 48 : 80)
 		);
 
 		new UIImage({
-			imageUrl:largeUrl,
-			fallbackUrl:imageUrl,
+			src:largeUrl,
+			alterSrc:imageUrl,
 			superview:[this, 'userImage']
 		});
 	}
@@ -3276,8 +3330,9 @@ class UIComment extends UIView
 	{
 		const textView = new UIView({
 			native:'text',
-			attrs: comment.locale,
-			superview:[this, 'main']
+			attrib:'lang dir',
+			superview:[this],
+			... comment.locale
 		});
 
 		const tokens = comment.structured.map(item => item.id);
@@ -3292,9 +3347,7 @@ class UIComment extends UIView
 				);
 			}
 
-			textView.appendChild(
-				UI.textNode(s)
-			);
+			textView.append({s});
 		});
 
 		if (comment.isReply && !comment.isUploader)
@@ -3309,32 +3362,15 @@ class UIComment extends UIView
 
 	createAnchor(x)
 	{
-		const {type, text, href} = x;
-
-		switch (type)
-		{
-			case 'TimeTag':
-				return new UIAnchor({
-					text,
-					data: {
-						startAt:x.startAt
-					},
-					target:[this, 'onClick:setVideoTime']
-				});
-
-			case 'EmbedLink':
-				return new UIAnchor({
-					text,
-					data: {
-						videoId:x.videoId,
-						startAt:x.startAt
-					},
-					target:[this, 'onClick:embedVideo']
-				});
-
-			default:
-				return new UIAnchor({text, href});
+		if (x.type == 'TimeTag') {
+			x.target = [this, 'onClick:setVideoTime'];
 		}
+
+		if (x.type == 'EmbedLink') {
+			x.target = [this, 'onClick:embedVideo'];
+		}
+
+		return new UIAnchor(x);
 	}
 }
 
@@ -3344,11 +3380,10 @@ class UIEmbeddedPlayer extends UIView
 	{
 		super({
 			native:'iframe',
-			import:'src contentDocument',
+			import:'contentDocument',
 			events:'load',
-			attrs: {
-				allowfullscreen:true
-			}
+			attrib:'src allowfullscreen',
+			allowfullscreen:true
 		});
 
 		this.player = document.createElement('video');
@@ -3401,52 +3436,52 @@ class UIEmbeddedPlayer extends UIView
 function SearchModelDelegate(self)
 {
 	return {
-		onCommentCount(n)
+		onContextLoad({maxCount, cachable})
 		{
-			if (n == CC_GLB) {
-				return;
-			}
+			self.maxCount = maxCount;
 
-			self.commentCount.value = match(n,
+			const n = match(maxCount,
 				[CC_NON, 'zero'],
 				[CC_DIS, 'off'],
-				[n, n],
 			);
 
-			self.commentCount.disabled = !ext.isCachable(n);
+			self.commentCount.value = [n, !cachable];
 		},
 
-		onResults(count, p)
+		onResults(size)
 		{
-			this.onCommentCount(p);
+			const {resultsView, messageView, maxCount:p} = self;
 
-			if (count) {
-				return self.resultsView.pushInitialBatch() & self.showView(self.resultsView);
+			if (size) {
+				return resultsView.pushInitialBatch() & self.showView(resultsView, true);
+			}
+
+			if (p > 150 || self.isGlobalMode) {
+				return messageView.showMessage('emptyResponse');
 			}
 
 			if (p < 1) {
-				return self.messageView.showMessage(match(p,
-					[CC_NON, 'errZeroComments'],
-					[CC_DIS, 'commentsDisabled'],
-					[CC_GLB, 'emptyResponse'],
+				return messageView.showMessage(match(p,
+					[CC_NON, 'errNoComments'],
+					[CC_DIS, 'errCommentsOff'],
 				));
 			}
 
-			if (p < 150) {
-				const action = new UIAnchor({
-					text:string.format('%s comments', p),
-					target:[self, 'onClick:getAllComments']
-				});
-
-				return self.messageView.showCustomMessage('Nothing found in ', action);
+			if (p <= 150) {
+				return messageView.showCustomMessage('Nothing found in ',
+					new UIAnchor({text:`${p} comments`, target:[self, 'onClick:getAllComments']}
+				));
 			}
-
-			self.messageView.showMessage('emptyResponse');
 		},
 
 		onError(errorId)
 		{
 			self.messageView.showMessage(errorId);
+		},
+
+		onTimeout()
+		{
+			self.didTimeout = true;
 		}
 	}
 }
@@ -3455,31 +3490,54 @@ class UpdatesView extends ViewController
 {
 	constructor()
 	{
-		super();
-
-		this.setView(
-			new UIUpdatesView(structuredClone(mem.updates), UpdatesViewDelegate(this))
+		const items = structuredClone(mem.updates).map(
+			data => new UIData(data)
 		);
+
+		super(
+			new UIUpdatesView(items), This
+		);
+
+		items.forEach(
+			data => data.addListener(this)
+		);
+	}
+
+	onDataChange({id, ...change})
+	{
+		assign(
+			mem.updates.find(item => item.id == id), change
+		);
+	}
+
+	onUpdateClicked(type)
+	{
+		if (type == 'changelog') {
+			return this.present(new ChangelogView);
+		}
 	}
 }
 
 class UIUpdatesView extends UIView
 {
-	constructor(items, delegate)
+	constructor(items)
 	{
-		super({items, delegate});
+		super({items});
 	}
 
 	didInit(init)
 	{
 		for (const data of init.items)
 		{
-			assign(data, this.constructor.map[data.type]);
-
 			this.addSubview(
-				new UIUpdate(data, this.delegate)
+				new UIUpdate(data, this.constructor.map[data.type])
 			);
 		}
+	}
+
+	onClick(sender)
+	{
+		this.delegate.onUpdateClicked(sender.type);
 	}
 
 	static map = {
@@ -3492,44 +3550,18 @@ class UIUpdatesView extends UIView
 
 class UIUpdate extends UIView
 {
-	constructor(data, delegate)
+	constructor(data, init)
 	{
-		super({events:'click', data, delegate});
+		super({
+			data, events:'click', attrib:'new', ...init
+		});
 	}
 
 	onClick()
 	{
-		this.setChange({read:true});
+		this.new = false;
 
-		this.delegate.onUpdateClicked(this.data.type);
-	}
-
-	setChange(change)
-	{
-		const [k, v] = unpack(change);
-
-		this.dataset[k] = v;
-
-		this.delegate.onDataMutation(this.data.id, change);
-	}
-}
-
-function UpdatesViewDelegate(self)
-{
-	return {
-		onUpdateClicked(type)
-		{
-			if (type == 'changelog') {
-				return self.present(new ChangelogView);
-			}
-		},
-
-		onDataMutation(id, change)
-		{
-			assign(
-				mem.updates.find(item => item.id == id), change
-			);
-		}
+		this.superview.onClick(this);
 	}
 }
 
@@ -3537,43 +3569,59 @@ class CommandsView extends ViewController
 {
 	constructor()
 	{
-		const commands = mem.commands;
-
 		const items = [{
 			name:'start',
 			title:'Start the extension',
-			value:commands.start
 		},{
 			name:'close',
 			title:'Close the extension',
 			accept:{Escape:'Esc'},
-			value:commands.close,
 		},{
 			name:'highlight',
 			title:'Highlight keywords in results',
-			value:commands.highlight,
 		},{
 			name:'tsSearch',
 			title:'Search current video time',
-			value:commands.tsSearch,
 		},{
 			name:'fsClose',
 			title:'Close while in fullscreen',
-			reject:{Escape:'Escape is reserved in fullscreen'},
-			value:commands.fsClose,
+			reject:{Escape:'Esc is reserved in fullscreen'},
 		}];
 
-		super(
-			new UICommandsView(items)
+		items.forEach(
+			item => item.data = new UIData({id:item.name, keys:mem.commands[item.name]})
 		);
+
+		super(
+			new UICommandsView(items), This
+		);
+
+		items.forEach(
+			({data}) => data.addListener(this)
+		);
+
+		this.items = items;
 	}
 
-	onCommandChange(_, change)
+	onDataChange({id, keys})
 	{
-		assign(mem.commands, change);
+		const c = {};
+
+		for (const {data} of this.items)
+		{
+			let cflct = keys.length && (data.id != id) && array.isEqual(data.keys, keys);
+
+			if (cflct) {
+				data.keys = [];
+			}
+
+			c[data.id] = data.keys;
+		}
+
+		mem.commands = c;
 	}
 
-	onEditState(_, newState)
+	onEditState(newState)
 	{
 		notifications.send({commandEdit:newState});
 	}
@@ -3583,106 +3631,85 @@ class UICommandsView extends UIView
 {
 	constructor(items)
 	{
-		super({items});
+		super({events:'focusin focusout', items});
 	}
 
 	didInit(init)
 	{
-		for (const data of init.items)
+		for (const item of init.items)
 		{
 			this.addSubview(
-				new UICommand(data)
+				new UICommand(item)
 			);
 		}
 
 		super.didInit(init);
 	}
 
-	onCommandChange({name}, keys)
+	onFocusin(e)
 	{
-		this.handleAction('onCommandChange', this, {[name]:keys});
-
-		if (!keys.length) {
-			return;
-		}
-
-		this.subviews.some(
-			({input}) => (input.name != name) && array.isEqual(input.value, keys) && input.newValue([])
-		);
+		this.delegate.onEditState(true);
 	}
 
-	onFocus()
+	onFocusout(e)
 	{
-		this.handleAction('onEditState', this, 1);
-	}
-
-	onBlur()
-	{
-		this.handleAction('onEditState', this, 0);
+		this.delegate.onEditState(false);
 	}
 }
 
 class UICommand extends UIView
 {
-	constructor(data)
+	didInit(item)
 	{
-		super({data});
-	}
+		this.error = this.append({error:null});
 
-	didInit(init)
-	{
-		this.addSubview(
-			this.input = new UICommandInput(init.data), 'commandInput'
+		this.input = new UICommandInput(
+			item.data,
+			item.accept,
+			item.reject, {
+				placeholder:'none',
+				delegate:this,
+				superview:[this],
+			}
 		);
 
-		this.error = this.querySelector('error');
-
-		super.didInit(init);
+		super.didInit(item);
 	}
 
-	onError(sender, message)
+	onInputReject(reason)
 	{
-		this.error.textContent = message;
+		this.error.textContent = reason;
 	}
 
-	onBlur()
+	onBlur(e)
 	{
 		this.error.textContent = '';
-
-		this.handleAction('onBlur', this);
 	}
 }
 
-class UICommandInput extends UIInput
+class UICommandInput extends UITextInput
 {
-	constructor(init)
+	constructor(data, accept = {}, reject = {}, init)
 	{
-		super(init);
+		super({data, accept, reject, ...init});
 	}
 
-	didInit(init)
+	onFocus(e)
 	{
-		this.placeholder = 'none';
-
-		this.accept = init.accept ?? {};
-		this.reject = init.reject ?? {};
-
-		super.didInit(init);
-	}
-
-	onFocus()
-	{
-		this.newValue([]) & super.onFocus();
+		this.keys = [];
 	}
 
 	onKeydown(e)
 	{
-		e.preventDefault();
-
-		this.evaluate(e, e.key, e.code);
+		e.preventDefault() & this.evaluate(e, e);
 	}
 
-	evaluate(e, key, code)
+	error(msg)
+	{
+		this.delegate.onInputReject(msg);
+	}
+
+	evaluate({key, code}, e)
 	{
 		let keys = [];
 
@@ -3707,35 +3734,18 @@ class UICommandInput extends UIInput
 			}
 		}
 
-		keys.push(code) & this.newValue(keys) & this.blur();
+		keys.push(code) & (this.keys = keys) & this.blur();
 	}
 
-	newValue(keys)
+	set keys(arr)
 	{
-		this.value = keys;
+		this.data.keys = arr;
 
-		this.handleAction('onCommandChange', this, keys);
-	}
-
-	error(message)
-	{
-		this.handleAction('onError', this, message);
-	}
-
-	set value(keys)
-	{
-		this.inner = keys;
-
-		keys = keys.map(
+		arr = arr.map(
 			s => string.capitalize(s.replace(/Key|Digit/, ''), string.PRE_STRCASE)
 		);
 
-		super.value = keys.join(' + ');
-	}
-
-	get value()
-	{
-		return this.inner;
+		super.value = arr.join(' + ');
 	}
 }
 
@@ -3821,12 +3831,22 @@ class UIDocument
 
 	setDarkModeState(bool)
 	{
-		this.el.setAttribute('dark', bool);
+		this.setBoolAttribute('dark', bool);
 	}
 
 	setFullscreenState()
 	{
-		this.el.setAttribute('fullscreen', this.isFullscreen);
+		this.setBoolAttribute('fullscreen', this.isFullscreen);
+	}
+
+	setBoolAttribute(k, v)
+	{
+		if (v) {
+			this.el.setAttribute(k, '');
+		}
+		else {
+			this.el.removeAttribute(k);
+		}
 	}
 }
 
@@ -3835,8 +3855,7 @@ class Shortcuts
 	constructor(commands)
 	{
 		this.interpret(commands);
-
-		this.setListenerState(true);
+		this.keydownEvents(true);
 
 		notifications.addListener(this,
 			'commandEdit commandsDataChange'
@@ -3845,38 +3864,21 @@ class Shortcuts
 
 	onKeydown(e)
 	{
-		const {mods, command} = this.map[e.code] || {};
+		const command = this.map[this.generateId(e)];
 
-		if (!command) {
-			return;
+		if (command) {
+			notifications.send({command}) && e.preventDefault() & e.stopPropagation();
 		}
-
-		for (const mod of mods) {
-			if (!e[mod]) return;
-		}
-
-		notifications.send({command}) &&
-			e.preventDefault() & e.stopPropagation();
 	}
 
-	onCommandEdit(bool)
+	onCommandEdit(isEditing)
 	{
-		this.setListenerState(!bool);
+		this.keydownEvents(!isEditing);
 	}
 
 	onCommandsDataChange(newValue)
 	{
 		this.interpret(newValue);
-	}
-
-	setListenerState(bool)
-	{
-		if (bool) {
-			events.addListener({keydown:window}, this.onKeydown.bind(this), true);
-		}
-		else {
-			events.removeListener({keydown:window});
-		}
 	}
 
 	interpret(commands)
@@ -3889,12 +3891,30 @@ class Shortcuts
 				continue;
 			}
 
-			const [key, mods] = [
-				keys.slice(-1)[0],
-				keys.slice(0, -1),
-			];
+			const id = this.generateId({
+				code:keys.at(-1),
+				altKey:keys.includes('altKey'),
+				ctrlKey:keys.includes('ctrlKey'),
+				metaKey:keys.includes('metaKey'),
+				shiftKey:keys.includes('shiftKey'),
+			});
 
-			this.map[key] = {mods, command};
+			this.map[id] = command;
+		}
+	}
+
+	generateId(e)
+	{
+		return [e.code, +e.altKey, +e.ctrlKey, +e.metaKey, +e.shiftKey].toString();
+	}
+
+	keydownEvents(listen)
+	{
+		if (listen) {
+			events.addListener({keydown:window}, this.onKeydown.bind(this), true);
+		}
+		else {
+			events.removeListener({keydown:window});
 		}
 	}
 }

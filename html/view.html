@@ -1,28 +1,20 @@
 <proto hidden>
-	<a protoid="UIAnchor" target="_blank"></a>
-	<progress-bar protoid="UIProgressBar" class="CSProgressBar"></progress-bar>
-	<cs-app protoid="UIWindow" id="CSApp" hidden>
-		<link rel="stylesheet" href="{url}html/style.css">
+	<cs-app protoid="UIAppView" id="CSApp" hidden>
+		<link rel="stylesheet" href="{style}">
 		<div class="CSViewStack" id="views"></div>
 	</cs-app>
 	<div protoid="UINavView">
 		<div class="CSViewStack" id="views"></div>
-	</div>
-	<div protoid="UIProgressInput">
-		<div class="CSApiKeyInput" id="textInput">
-		</div>
 	</div>
 	<search protoid="UISearchView">
 		<header id="header"></header>
 	</search>
 	<comment protoid="UIComment">
 		<a class="CSUserImage" href="{channelUrl}" target="_blank" id="userImage"></a>
-		<main id="main">
-			<author id="meta">
-				<a class="CSAuthorName" href="{channelUrl}" target="_blank">{displayName}</a>
-				<a class="CSCommentTime" href="{permalink}" target="_blank">{publishedAt}</a>
-			</author>
-		</main>
+		<author>
+			<a class="CSAuthorName" href="{channelUrl}" target="_blank">{displayName}</a>
+			<a class="CSCommentTime" href="{permalink}" target="_blank">{publishedAt}</a>
+		</author>
 	</comment>
 	<div protoid="UIFeaturesView" class="CSContentView CSFeaturesView">
 		<h1>Hooray!</h1>
@@ -48,40 +40,29 @@
 		<h1>Keyboard Shortcuts</h1>
 		<p>Few things to take in mind before setting a shortcut:</p>
 		<ul>
-			<li>Shortcut reserved by other app needs to be released before you can use it here.
-			<li>You can use the <code>Shift + Key</code> pattern if you are willing to override the default behavior.
+			<li>Shortcut used by other app needs to be released first.
+			<li>You can use the <code>Shift + X</code> pattern.
 		</ul>
 	</commands>
 	<shortcut protoid="UICommand">
-		<label>{title}</label>
-		<edit id="commandInput">
-			<error></error>
-		</edit>
+		<title>{title}</title>
 	</shortcut>
 	<updates protoid="UIUpdatesView" class="CSView CSBasicView">
 		<h1>Updates</h1>
 	</updates>
-	<update protoid="UIUpdate" data-read="{read}">
+	<update protoid="UIUpdate">
 		<header>{header}</header>
 		<detail>{detail}</detail>
 	</update>
-	<div protoid="UIAuthView" class="CSContentView CSFlexCenter">
+	<auth protoid="UIAuthView" class="CSContentView CSFlexCenter">
 		<h1>Welcome!</h1>
-		<p class="CSSelectable">Please insert your Youtube Data API key</p>
-		<div class="CSApiKeyInputComponent" id="keyInput">
-		</div>
-		<div class="CSViewArtwork" id="artwork">
-		</div>
-		<div class="CSStickBottom" id="footer"></div>
-	</div>
+		<p class="CSTextSelect">Please insert your Youtube Data API key</p>
+	</auth>
 	<div protoid="UIHelpView" class="CSContentView">
 		<h1>Youtube API Key</h1>
 		<p>Youtube API key is needed for any software that wants to access youtube data like comments and videos.</p>
 		<p>Some apps use their own key for this purpose, but that may have disadvantages for the end-user in terms of privacy and reliability.</p>
 		<p>Generating your own key is free and ensures your activity stays private and not limited.</p>
-		<div class="CSStickBottom">
-			<div class="CSButtons" id="actionBtns"></div>
-		</div>
 	</div>
 	<div protoid="UIErrorView" class="CSContentView CSFlexCenter">
 		<h1>Hmm..</h1>
