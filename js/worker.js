@@ -58,11 +58,6 @@ function clone(array)
 	return [...array];
 }
 
-function on(s)
-{
-	return 'on' + s[0].toUpperCase() + s.slice(1);
-}
-
 function match(value, ...cases)
 {
 	for (const [k, v] of cases) {
@@ -70,6 +65,16 @@ function match(value, ...cases)
 	}
 
 	return value;
+}
+
+function on(s)
+{
+	return 'on' + s[0].toUpperCase() + s.slice(1);
+}
+
+function px(n)
+{
+	return n + 'px';
 }
 
 class is
@@ -158,6 +163,8 @@ class string
 
 	static removeWS(str, PRE_NEWLINE)
 	{
+		str = str.replace(/[\u200B-\u200D\uFEFF]/g, ' ');
+
 		if (PRE_NEWLINE) {
 			str = str.replace(/\s*\n\s*/g, '\n').replace(/[^\S\n]+/g, ' ');
 		}
@@ -703,8 +710,8 @@ class Storage
 	{
 		clearTimeout(this.commitId);
 
-		this.commitId = setTimeout(
-			_ => this.persist(this.items)
+		this.commitId = setTimeout(_ =>
+			this.persist(this.items)
 		);
 
 		return this.items[k];
@@ -852,11 +859,28 @@ class Portable
 		this.didDisconnect = this.DIS_INITIAL;
 	}
 
-	onMessage(method, data)
+	postMessage(message)
+	{
+		this.port.postMessage(message);
+	}
+
+	onPortMessage(message)
+	{
+		this.onMessage(
+			...unpack(message)
+		);
+	}
+
+	onMessage(id, data)
 	{
 		if (!this.didDisconnect) {
-			return this[method](data);
+			return this[on(id)](data);
 		}
+	}
+
+	onDisconnect()
+	{
+		this.didDisconnect = this.DIS_TIMEOUT;
 	}
 
 	disconnect()
@@ -867,67 +891,6 @@ class Portable
 	get id()
 	{
 		return this.port.name;
-	}
-
-	onPortMessage(message)
-	{
-		this.onMessage(
-			...unpack(message)
-		);
-	}
-
-	onDisconnect()
-	{
-		this.didDisconnect = this.DIS_TIMEOUT;
-	}
-}
-
-class MasterPort extends Portable
-{
-	constructor(name)
-	{
-		super(
-			chrome.runtime.connect({name})
-		);
-	}
-
-	onConnect(port)
-	{
-		super.onConnect(port);
-
-		this.workerReady = new PendingPromise;
-	}
-
-	didConnect()
-	{
-		this.workerReady.resolve(true);
-	}
-
-	postMessage(message)
-	{
-		this.canPost && this.workerReady.then(
-			_ => this.port.postMessage(message)
-		);
-	}
-
-	reconnect()
-	{
-		this.onConnect(
-			chrome.runtime.connect({name:this.port.name})
-		);
-	}
-
-	get canPost()
-	{
-		if (this.didDisconnect == this.DIS_REQUEST) {
-			return;
-		}
-
-		if (this.didDisconnect == this.DIS_TIMEOUT) {
-			this.reconnect();
-		}
-
-		return true;
 	}
 }
 
@@ -941,20 +904,72 @@ class WorkerPort extends Portable
 	onConnect(port)
 	{
 		super.onConnect(port);
-
 		this.didConnect(true);
 	}
 
-	didConnect(didConnect)
+	didConnect(workerReady)
 	{
-		this.postMessage({didConnect});
+		this.postMessage({workerReady});
 	}
 
 	postMessage(message)
 	{
 		if (!this.didDisconnect) {
-			this.port.postMessage(message);
+			super.postMessage(message);
 		}
+	}
+}
+
+class Bucket
+{
+	constructor(id, bucketId)
+	{
+		this.id = id;
+		this.data = {};
+		this.bucketId = bucketId;
+	}
+
+	set(data)
+	{
+		this.data = data;
+	}
+
+	toJSON()
+	{
+		return {[this.id]:this.data};
+	}
+}
+
+const TopComment = {
+	id:			null,
+	videoId:	null,
+	authorId:	null,
+	replyCount:	null,
+	isReply:	null,
+	sourceName:	null,
+	sourceText:	null,
+
+	from(data, isApi)
+	{
+		const This = {...this};
+
+		if (isApi)
+		{
+			assign(This,
+				new YTComment(data.topLevelComment)
+			);
+
+			This.isReply = false;
+			This.videoId = data.videoId;
+			This.replyCount = data.totalReplyCount;
+		}
+		else {
+			for (const k in This) {
+				This[k] = data[k] ?? This[k];
+			}
+		}
+
+		return delete This.from && This;
 	}
 }
 
@@ -1004,8 +1019,8 @@ class Main
 	{
 		const waitLoad = function(event, ...args)
 		{
-			this.waitLoad.then(
-				_ => this[event](...args)
+			this.waitLoad.then(_ =>
+				this[event](...args)
 			);
 
 			return true;
@@ -1325,41 +1340,55 @@ class nlp
 
 class formatter
 {
-	static formatText(str)
+	static formatText(s)
 	{
-		str = new ParsedString(str);
+		s = new ParsedString(s);
 
-		str.isUpperCase && str.toLowerCase();
+		s.isUpperCase &&
+			s.toLowerCase();
 
-		if (str.hasChars('.'))
-		{
-			str.replace(/([a-z]\.){2,}/gi, m => m.replace(/\./g, ''));
-
-			str.replace(/([^.])\.$/, '$1');
+		if (s.hasChars('.')) {
+			s.replace(/([a-z]\.){2,}/gi, m => m.replace(/\./g, ''));
+			s.replace(/([^.])\.$/, '$1');
 		}
 
-		str.replace(/\n/g,
+		s.hasChars(':;') && s.replace(/[:;]([xvopd]+\b|[()|/]+)/gi,
+			s => this.emoticon[s.toLowerCase().slice(0, 2)]
+		);
+
+		s.replace(/\n/g,
 			(_, i, s) => string.isLetter(s[--i]) ? '. ' : ' '
 		);
 
-		if (str.hasChars('(,!?.)'))
-		{
-			str.replace(/[?!]{2,}/, '?!');
-
-			str.replace(/ ([!?),.])/g, '$1');
-
-			str.replace(/([)!?,.])(\p{L})/gu, '$1 $2');
-
-			str.replace(/([?!])[,.]+/g, '$1');
+		if (s.hasChars('(,!?.)')) {
+			s.replace(/[?!]{2,}/, '?!');
+			s.replace(/ ([!?),.])/g, '$1');
+			s.replace(/([)!?,.])(\p{L})/gu, '$1 $2');
+			s.replace(/([?!])[,.]+/g, '$1');
 		}
 
-		str.hasChars('*_') && str.replace(/[*_]+(.+?)[_*]+/g, '$1');
+		s.hasChars('$£€') && s.replace(/(\d[\d,.]*)([$£€])/g, '$2$1');
+		s.hasChars('*_') && s.replace(/[*_]+(.+?)[_*]+/g, '$1');
+		s.hasChars(':') && s.replace(/ : /g, ': ');
+		s.hasChars('&') && s.replace(/ & /g, ' and ');
+		s.hasChars('"') && s.replace(/\"\. ([a-z])/i, '" - $1');
 
-		str.hasChars(':') && str.replace(/ : /g, ': ');
+		return s.output;
+	}
 
-		str.hasChars('&') && str.replace(/ & /g, ' and ');
-
-		return str.output;
+	static emoticon = {
+		':x':'\u{1F635}',
+		':v':'\u{0270C}',
+		':o':'\u{1F62F}',
+		':p':'\u{1F60B}',
+		';p':'\u{1F60B}',
+		';d':'\u{1F604}',
+		':d':'\u{1F604}',
+		':)':'\u{1F642}',
+		';)':'\u{1F609}',
+		':(':'\u{1F641}',
+		':|':'\u{1F610}',
+		':/':'\u{1F615}',
 	}
 }
 
@@ -1492,58 +1521,59 @@ class http
 	}
 }
 
-class BasicVideo
+class YTVideo
 {
-	constructor(APIResource)
+	constructor({items:[_]})
 	{
-		const r = APIResource.items[0];
-
-		this.channelId		= r.snippet.channelId;
-		this.publishedAt	= r.snippet.publishedAt;
-		this.duration		= r.contentDetails.duration;
-		this.commentCount	= r.statistics.commentCount;
+		this.channelId		= _.snippet.channelId;
+		this.publishedAt	= _.snippet.publishedAt;
+		this.duration		= _.contentDetails.duration;
+		this.commentCount	= _.statistics.commentCount;
 	}
 }
 
-class BasicComment
+class YTComment extends Cloneable
 {
-	constructor(APIResource)
+	constructor({id, snippet:_})
 	{
-		const r = APIResource.snippet;
+		super();
 
-		this.id				= APIResource.id;
-		this.authorId		= r.authorChannelId.value;
-		this.authorImgUrl	= r.authorProfileImageUrl;
-		this.sourceName		= r.authorDisplayName;
-		this.sourceText		= r.textOriginal;
-		this.publishedAt	= r.publishedAt;
-		this.isOwner		= null;
+		this.id				= id;
+		this.authorId		= _.authorChannelId?.value;
+		this.authorImgUrl	= _.authorProfileImageUrl;
+		this.sourceName		= _.authorDisplayName;
+		this.sourceText		= _.textOriginal;
+		this.publishedAt	= _.publishedAt;
+		this.replyCount		= 0;
+		this.isReply		= true;
+		this.isOwner		= false;
+		this.videoId		= null;
 	}
 }
 
 class Thread extends Cloneable
 {
-	constructor(topComment, videoId, replyCount)
+	constructor(comments)
 	{
 		super();
 
-		this.id			= topComment.id;
-		this.authorId	= topComment.authorId;
-		this.videoId	= videoId;
-		this.replyCount	= replyCount;
-		this.members	= new Set;
-		this.comments	= [];
+		this.comments = comments;
+		this.members = new Set;
 
-		this.addComment(topComment);
+		for (const comment of this.comments)
+		{
+			comment.isOwner = comment.authorId == this.authorId;
+			comment.videoId = this.videoId;
+
+			this.members.add(comment.authorId);
+		}
 	}
 
-	addComment(comment)
+	upgrade(context)
 	{
-		this.comments.push(
-			new ThreadComment(comment, this)
+		this.comments = this.comments.map(
+			comment => new ParsedComment(comment, context)
 		);
-
-		this.members.add(comment.authorId);
 	}
 
 	hasMember(id)
@@ -1575,11 +1605,6 @@ class Thread extends Cloneable
 		return this.members.size;
 	}
 
-	get topComment()
-	{
-		return this.comments[0];
-	}
-
 	get replies()
 	{
 		return this.comments.slice(1);
@@ -1588,6 +1613,11 @@ class Thread extends Cloneable
 	get hasReplies()
 	{
 		return this.length > 1;
+	}
+
+	get topComment()
+	{
+		return this.comments[0];
 	}
 
 	get firstReply()
@@ -1599,20 +1629,43 @@ class Thread extends Cloneable
 	{
 		return this.topComment.hidden;
 	}
-}
 
-class ThreadComment extends Cloneable
-{
-	constructor(BasicComment, thread)
+	get id()
 	{
-		super();
+		return this.topComment.id;
+	}
 
-		assign(this, BasicComment);
+	get videoId()
+	{
+		return this.topComment.videoId;
+	}
 
-		this.videoId	= thread.videoId;
-		this.isReply	= thread.length > 0;
-		this.isOwner	= thread.authorId == this.authorId;
-		this.replyCount = this.isReply ? 0 : thread.replyCount;
+	get authorId()
+	{
+		return this.topComment.authorId;
+	}
+
+	toJSON()
+	{
+		return this.comments.map(x => ({
+			id:				x.id,
+			videoId:		x.videoId,
+			parentId:		x.parent?.id,
+			replyCount:		x.replyCount,
+			isReply:		x.isReply,
+			isUploader:		x.isUploader,
+			authorId:		x.authorId,
+			authorImgUrl:	x.authorImgUrl,
+			displayName:	x.author.displayName,
+			structured:		x.structured,
+			locale:			x.normalized.locale,
+			publishedAt:	time.ago(x.publishedAt),
+			channelUrl:		string.replace('https://www.youtube.com/channel/{authorId}', x),
+			permalink:		string.replace('https://www.youtube.com/watch?v={videoId}&lc={id}', x),
+			displayText:	formatter.formatText(x.parsedText),
+			sourceName:		x.author.name,
+			sourceText:		'',
+		}));
 	}
 }
 
@@ -1692,9 +1745,15 @@ class YoutubeCommonApi
 		return this.getAllComments({videoId});
 	}
 
-	getReplies(parentId)
+	async getReplies(topComment)
 	{
-		return this.comments({parentId});
+		const fetch = await this.comments({parentId:topComment.id});
+
+		if (fetch.ok) {
+			fetch.data = this.parseReplies(topComment, fetch.data);
+		}
+
+		return fetch;
 	}
 
 	searchVideoComments(videoId, searchTerms)
@@ -1718,7 +1777,7 @@ class YoutubeCommonApi
 		if (fetch.ok)
 		{
 			try {
-				fetch.data = new BasicVideo(fetch.data);
+				fetch.data = new YTVideo(fetch.data);
 			}
 			catch {
 				fetch.error = 'errParsing';
@@ -1753,14 +1812,9 @@ class YoutubeCommonApi
 		return fetch;
 	}
 
-	async comments(params)
+	comments(params)
 	{
-		const fetch = await this.get('/comments', params);
-
-		if (fetch.ok) {
-		}
-
-		return fetch;
+		return this.get('/comments', params);
 	}
 
 	async getAllComments(params)
@@ -1803,66 +1857,50 @@ class YoutubeCommonApi
 		}
 	}
 
-	parseThreads(resource)
+	parseThread({snippet, replies})
 	{
 		try {
-			return array.mapskip(resource.items,
-				item => this.parseThread(item)
-			);
-		}
-		catch {
-			return [];
-		}
-	}
+			replies = replies?.comments || [];
 
-	parseThread(resource)
-	{
-		try {
-			let {videoId, topLevelComment, totalReplyCount} = resource.snippet;
-
-			if (!videoId) {
+			if (!snippet.videoId) {
 				return;
 			}
 
-			let thread = new Thread(
-				this.parseComment(topLevelComment), videoId, totalReplyCount
+			return new Thread(
+				[TopComment.from(snippet, 1), ...this.parseComments(replies)]
 			);
-
-			if (totalReplyCount) {
-				this.parseReplies(resource).forEach(
-					reply => thread.addComment(reply)
-				);
-			}
-
-			return thread;
 		}
 		catch {
 		}
 	}
 
-	parseReplies(resource)
+	parseReplies(topComment, {items})
 	{
-		try {
-			const replies = array.mapskip(resource.replies.comments,
-				reply => this.parseComment(reply)
-			);
+		const replies = this.parseComments(items);
 
-			return replies.sort(
-				(a, b) => a.publishedAt - b.publishedAt
-			);
-		}
-		catch {
-			return [];
-		}
+		replies.unshift(
+			TopComment.from(topComment)
+		);
+
+		return new Thread(replies);
 	}
 
-	parseComment(resource)
+	parseComments(items)
 	{
-		try {
-			return new BasicComment(resource);
-		}
-		catch {
-		}
+		items = items.map(
+			item => new YTComment(item)
+		);
+
+		return items.sort(
+			(a, b) => a.publishedAt - b.publishedAt
+		);
+	}
+
+	parseThreads({items})
+	{
+		return array.mapskip(items,
+			item => this.parseThread(item)
+		);
 	}
 }
 
@@ -1906,7 +1944,7 @@ class YoutubeDataApi extends YoutubeCommonApi
 
 	comments(params)
 	{
-		params.part = 'replies';
+		params.part = 'snippet';
 
 		return super.comments(
 			this.addCommonParams(params)
@@ -1997,56 +2035,11 @@ class Users
 {
 	constructor(threads)
 	{
-		this.index;
-		this.users = {};
-		this.posts = {};
-
-		this.parse(threads);
-	}
-
-	get(id)
-	{
-		return this.users[id];
-	}
-
-	getByName(name)
-	{
-		return this.index.get(name);
-	}
-
-	parse(threads)
-	{
-		for (const thread of threads)
-		{
-			for (const comment of thread.comments)
-			{
-				this.addUser(comment.authorId, comment.sourceName);
-				this.addPost(comment.authorId, comment.sourceText);
+		for (const thread of threads) {
+			for (const {authorId, sourceName} of thread.comments) {
+				this[authorId] = new Author(authorId, sourceName)
 			}
 		}
-
-		this.index = this.remap(this.users, 'name');
-	}
-
-	addUser(id, name)
-	{
-		this.users[id] = new Author(id, name);
-	}
-
-	addPost(id, text)
-	{
-		(this.posts[id] ||= []).push(text);
-	}
-
-	remap(object, k)
-	{
-		const m = new Map;
-
-		values(object).forEach(
-			v => m.set(v[k], v)
-		);
-
-		return m;
 	}
 }
 
@@ -2070,37 +2063,15 @@ class Author
 	}
 }
 
-class Comment
-{
-	constructor(x)
-	{
-		this.id				= x.id;
-		this.videoId		= x.videoId;
-		this.parentId		= x.parent?.id;
-		this.replyCount		= x.replyCount;
-		this.isReply		= x.isReply;
-		this.isUploader		= x.isUploader;
-		this.authorImgUrl	= x.authorImgUrl;
-		this.displayName	= x.displayName;
-		this.displayText	= x.displayText;
-		this.locale			= x.normalized.locale;
-		this.publishedAt	= time.ago(x.publishedAt);
-		this.channelUrl		= string.replace('https://www.youtube.com/channel/{authorId}', x);
-		this.permalink		= string.replace('https://www.youtube.com/watch?v={videoId}&lc={id}', x);
-		this.structured		= x.structured;
-		this.hidden			= x.hidden;
-	}
-}
-
 class ParsedComment
 {
-	constructor(ThreadComment, ctx)
+	constructor(YTComment, ctx)
 	{
-		assign(this, ThreadComment);
+		assign(this, YTComment);
 
-		this.author			= ctx.users.get(this.authorId);
+		this.author			= ctx.users[this.authorId];
 		this.isUploader		= ctx.uploaderId == this.authorId;
-		this.parsedText		= '';
+		this.parsedText		= this.sourceText;
 		this.normalized		= {};
 		this.structured		= [];
 		this.children		= [];
@@ -2108,16 +2079,10 @@ class ParsedComment
 		this.toAuthor		= null;
 		this.hidden			= false;
 
-		this.prepareText();
 		this.parseLinks();
 		this.parseHashtags();
 		this.parseTimetags(ctx.videoId, ctx.videoTime);
 		this.parseText();
-	}
-
-	prepareText()
-	{
-		this.parsedText = this.sourceText.replace(/^\u200b/, '');
 	}
 
 	parseText()
@@ -2268,16 +2233,114 @@ class Frames
 
 class Parser
 {
-	constructor(threads, ctx)
+	static parse(thread, ctx)
 	{
-		this.frames = new Frames;
-		this.dictionary = new Dictionary;
+		thread.upgrade(ctx);
 
-		return this.parse(threads, ctx);
+		const members = [...thread.members].map(
+			id => ctx.users[id]
+		);
+
+		for (const reply of thread.replies)
+		{
+			reply.toAuthor = members.find(
+				author => author.mentionRegex.test(reply.parsedText)
+			);
+		}
+
+		let i = 0, n = thread.length;
+
+		while (i + 2 < n)
+		{
+			const users = [], items = [];
+
+			while (i < n)
+			{
+				const item = thread.comments[i];
+				const user = item.author;
+
+				if (users.at(-1) == user) {
+					break;
+				}
+
+				if (!users.includes(user) && array.unique(users).length == 2) {
+					break;
+				}
+
+				users.push(user);
+				items.push(item);
+
+				i++;
+			}
+
+			if (items.length == 2) {
+				i--;
+			}
+
+			if (items.length > 2)
+			{
+				const broken = items.some(item => item.toAuthor && !users.includes(item.toAuthor));
+
+				if (broken) {
+					i--;
+				}
+				else {
+					items.forEach(
+						item => item.toAuthor = users.find(user => user != item.author)
+					);
+				}
+			}
+		}
+
+		thread.replies.forEach((reply, i) =>
+		{
+			if (reply.toAuthor)
+			{
+				let prev, toAuthor = reply.toAuthor, mentionText = '';
+
+				while (prev = thread.replies[--i])
+				{
+					if (prev.author == toAuthor)
+					{
+						thread.defineChildToParent(prev, reply);
+
+						if (prev.children.some(r => r.author != reply.author))
+						{
+							mentionText = reply.addStructuredItem(
+								new ChannelLink(toAuthor.displayName, toAuthor.id)
+							);
+						}
+
+						break;
+					}
+				}
+
+				reply.parsedText = reply.parsedText.replace(toAuthor.replaceRegex, mentionText + ' ');
+			}
+			else {
+				let prev = thread.replies[--i];
+
+				if (reply.author == prev?.toAuthor)
+				{
+					thread.defineChildToParent(prev, reply);
+
+					reply.toAuthor = prev.author;
+				}
+			}
+		});
+
+		return thread;
 	}
 
-	parse(threads, ctx)
+	static sort(threads, ctx)
 	{
+		for (const thread of threads) {
+			this.parse(thread, ctx);
+		}
+
+		const frames = new Frames;
+		const dictionary = new Dictionary;
+
 		const query = {
 			normalized:nlp.normalize(ctx.query.string)
 		};
@@ -2341,23 +2404,16 @@ class Parser
 
 			const meta = thread.meta;
 
-			thread.comments = thread.comments.map(comment =>
+			for (const reply of thread.replies)
 			{
-				comment = new ParsedComment(comment, ctx);
-
-				if (comment.isReply)
-				{
-					if (comment.isOwner && thread.memberCount > 1) {
-						meta.ownerReplied = true;
-					}
-
-					if (comment.isUploader) {
-						meta.uploaderReplied = true;
-					}
+				if (reply.isOwner && thread.memberCount > 1) {
+					meta.ownerReplied = true;
 				}
 
-				return comment;
-			});
+				if (reply.isUploader) {
+					meta.uploaderReplied = true;
+				}
+			}
 
 			const topComment = thread.topComment;
 
@@ -2369,7 +2425,7 @@ class Parser
 			{
 				if (x instanceof TimeTag)
 				{
-					const frameId = this.frames.getId(x.startAt);
+					const frameId = frames.getId(x.startAt);
 
 					meta.frames.push(frameId);
 
@@ -2396,7 +2452,7 @@ class Parser
 			);
 
 			thread.meta.tokens.forEach(
-				k => k.length > 2 && !novalWords.includes(k) && this.dictionary.add(k)
+				k => k.length > 2 && !novalWords.includes(k) && dictionary.add(k)
 			);
 		}
 
@@ -2405,7 +2461,7 @@ class Parser
 			const {meta, rank} = thread;
 
 			meta.tokens.forEach(
-				k => rank.keywords += this.dictionary.get(k)
+				k => rank.keywords += dictionary.get(k)
 			);
 
 			rank.keywords /= meta.tokenCount;
@@ -2468,127 +2524,10 @@ class Parser
 			}
 		});
 
-		for (const thread of threads)
-		{
-			if (!thread.hasReplies) {
-				continue;
-			}
-
-			const members = [...thread.members].map(
-				id => ctx.users.get(id)
-			);
-
-			for (const reply of thread.replies)
-			{
-				reply.toAuthor = members.find(
-					author => author.mentionRegex.test(reply.parsedText)
-				);
-			}
-
-			let i = 0, n = thread.length;
-
-			while (i + 2 < n)
-			{
-				const users = [], items = [];
-
-				while (i < n)
-				{
-					const item = thread.comments[i];
-					const user = item.author;
-
-					if (users.at(-1) == user) {
-						break;
-					}
-
-					if (!users.includes(user) && array.unique(users).length == 2) {
-						break;
-					}
-
-					users.push(user);
-					items.push(item);
-
-					i++;
-				}
-
-				if (items.length == 2) {
-					i--;
-				}
-
-				if (items.length > 2)
-				{
-					const broken = items.some(item => item.toAuthor && !users.includes(item.toAuthor));
-
-					if (broken) {
-						i--;
-					}
-					else {
-						items.forEach(
-							item => item.toAuthor = users.find(user => user != item.author)
-						);
-					}
-				}
-			}
-
-			thread.replies.forEach((reply, i) =>
-			{
-				if (reply.toAuthor)
-				{
-					let prev, toAuthor = reply.toAuthor, mentionText = '';
-
-					while (prev = thread.replies[--i])
-					{
-						if (prev.author == toAuthor)
-						{
-							thread.defineChildToParent(prev, reply);
-
-							if (prev.children.some(r => r.author != reply.author))
-							{
-								mentionText = reply.addStructuredItem(
-									new ChannelLink(toAuthor.displayName, toAuthor.id)
-								);
-							}
-
-							break;
-						}
-					}
-
-					reply.parsedText = reply.parsedText.replace(toAuthor.replaceRegex, mentionText + ' ');
-				}
-				else {
-					let prev = thread.replies[--i];
-
-					if (reply.author == prev?.toAuthor)
-					{
-						thread.defineChildToParent(prev, reply);
-
-						reply.toAuthor = prev.author;
-					}
-				}
-			});
-		}
-
-		return array.mapskip(threads, thread =>
-		{
-			return array.mapfail(thread.comments, comment =>
-			{
-				comment.displayName = comment.author.displayName;
-				comment.displayText = formatter.formatText(comment.parsedText);
-
-				if (comment.displayText.length < 2)
-				{
-					if (comment == thread.topComment) {
-						return;
-					}
-
-					comment.hide(true);
-				}
-
-				return new Comment(comment);
-			});
-		});
+		return threads;
 	}
 
-	textTooLong(thread, uploaderId)
+	static textTooLong(thread, uploaderId)
 	{
 		const str = thread.topComment.parsedText;
 
@@ -2596,7 +2535,7 @@ class Parser
 			(str.length > 500 || string.count(/^.{0,3}\n/gm, str) > 3);
 	}
 
-	fxProximity(subset, superset)
+	static fxProximity(subset, superset)
 	{
 		const indexes = subset.map(
 			k => superset.indexOf(k)
@@ -2617,7 +2556,7 @@ class Parser
 		);
 	}
 
-	fxReplyCount(x)
+	static fxReplyCount(x)
 	{
 		return (0.834 * x) - (0.167 * x ** 2);
 	}
@@ -2901,20 +2840,6 @@ class SearchQuery
 	}
 }
 
-class SearchResponse
-{
-	constructor(requestId)
-	{
-		this.id = requestId;
-		this.threads = [];
-	}
-
-	setResults(threads)
-	{
-		this.threads = threads;
-	}
-}
-
 class SearchModel extends WorkerPort
 {
 	constructor(port)
@@ -2922,7 +2847,7 @@ class SearchModel extends WorkerPort
 		super(port);
 
 		this.commentCount = 0;
-		this.lastRequestId = 0;
+		this.lastBucketId = 0;
 	}
 
 	onConnect(port)
@@ -2933,39 +2858,54 @@ class SearchModel extends WorkerPort
 		api.v3.preconnect();
 	}
 
-	onMessage(method, data)
+	onMessage(id, data)
 	{
-		this.loadContext().then(
-			_ => super.onMessage(method, data)
+		this.loadContext().then(_ =>
+			this.processRequest(id, data)
 		)
 		.catch(
-			id => this.sendError(id)
+			id => this.postMessage({error:id})
 		);
 	}
 
-	async searchRequest(q)
+	async processRequest(id, data)
 	{
-		const id = this.requestId, r = new SearchResponse(id);
+		const r = new Bucket(id, this.bucketId);
 
-		try {
-			this.context.query = new SearchQuery(q);
-
-			if (this.context.query.global) {
-				await this.globalSearch(r);
-			}
-			else {
-				await this.scopedSearch(r);
-			}
-
-			if (!this.requestAborted(id)) {
-				this.postMessage({searchRequest:r});
-			}
+		if (id == 'abort') {
+			return;
 		}
-		catch (errorId) {
-			if (!this.requestAborted(id)) {
-				throw errorId;
+
+		await this[on(id)](data, r);
+
+		!this.requestAborted(r)
+			&& this.postMessage(r);
+	}
+
+	onCommentSearch(q, r)
+	{
+		this.context.query = new SearchQuery(q);
+
+		return this.context.query.global
+			? this.globalSearch(r)
+			: this.scopedSearch(r);
+	}
+
+	onCommentReplies(topComment, response)
+	{
+		return api.v3.getReplies(topComment).then(({data, error}) =>
+		{
+			if (error) {
+				throw error;
 			}
-		}
+
+			const thread = Parser.parse(data, {
+				...this.context,
+				users: new Users([data])
+			});
+
+			thread.comments.shift() & response.set({thread});
+		});
 	}
 
 	globalSearch(response)
@@ -3002,22 +2942,23 @@ class SearchModel extends WorkerPort
 		);
 	}
 
-	handleApiResponse(fetch, response)
+	handleApiResponse({data, error}, response)
 	{
-		if (fetch.error) {
-			throw fetch.error;
+		if (error) {
+			throw error;
 		}
 
-		this.resolveRequest(fetch.data, response);
+		this.resolveRequest(data, response);
 	}
 
 	resolveRequest(threads, response, fromIdx)
 	{
-		const users = fromIdx ? this.index.users : new Users(threads);
+		threads = Parser.sort(threads, {
+			...this.context,
+			users:fromIdx ? this.index.users : new Users(threads)
+		});
 
-		response.setResults(
-			new Parser(threads, {...this.context, users})
-		);
+		response.set({threads});
 	}
 
 	loadContext()
@@ -3044,7 +2985,7 @@ class SearchModel extends WorkerPort
 				this.loadComments();
 			}
 
-			this.postMessage({onContextLoad:{
+			this.postMessage({contextLoad:{
 				maxCount:this.commentCount,
 				cachable:this.isCachable,
 			}});
@@ -3063,24 +3004,19 @@ class SearchModel extends WorkerPort
 		});
 	}
 
+	requestAborted({bucketId})
+	{
+		return bucketId < this.lastBucketId;
+	}
+
 	get isCachable()
 	{
 		return math.inRange(this.commentCount, [1, 1e3]);
 	}
 
-	get requestId()
+	get bucketId()
 	{
-		return ++this.lastRequestId;
-	}
-
-	requestAborted(requestId)
-	{
-		return requestId != this.lastRequestId;
-	}
-
-	sendError(id)
-	{
-		this.postMessage({error:id});
+		return ++this.lastBucketId;
 	}
 }
 

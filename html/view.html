@@ -1,16 +1,11 @@
 <proto hidden>
 	<cs-app protoid="UIAppView" id="CSApp" hidden>
 		<link rel="stylesheet" href="{style}">
-		<div class="CSViewStack" id="views"></div>
 	</cs-app>
-	<div protoid="UINavView">
-		<div class="CSViewStack" id="views"></div>
-	</div>
-	<search protoid="UISearchView">
-		<header id="header"></header>
-	</search>
 	<comment protoid="UIComment">
-		<a class="CSUserImage" href="{channelUrl}" target="_blank" id="userImage"></a>
+		<side>
+			<a class="user-image" href="{channelUrl}" target="_blank"></a>
+		</side>
 		<author>
 			<a class="CSAuthorName" href="{channelUrl}" target="_blank">{displayName}</a>
 			<a class="CSCommentTime" href="{permalink}" target="_blank">{publishedAt}</a>
