@@ -6,56 +6,24 @@
  */
 'use strict';
 
-const CC_NON = 0;
-const CC_DIS = -1;
+const CommentCount = {
+	Non:0,
+	Off:-1,
+}
 
 function none()
 {
 	return null;
 }
 
-function This(This)
+function clone(array)
 {
-	return This;
-}
-
-function keys(object)
-{
-	return Object.keys(object);
-}
-
-function values(object)
-{
-	return Object.values(object);
-}
-
-function entries(object)
-{
-	return Object.entries(object);
-}
-
-function assign()
-{
-	return Object.assign(...arguments);
+	return [...array];
 }
 
 function unpack(pack, ...moreArgs)
 {
 	return [...entries(pack)[0], ...moreArgs];
-}
-
-function pop(pack)
-{
-	let [key, object, val] = unpack(pack, null);
-
-	val = object[key];
-
-	return delete object[key] && val;
-}
-
-function clone(array)
-{
-	return [...array];
 }
 
 function match(value, ...cases)
@@ -67,14 +35,47 @@ function match(value, ...cases)
 	return value;
 }
 
+function pop(property)
+{
+	let [key, object, value] = unpack(property, null);
+
+	value = object[key];
+
+	return delete object[key] && value;
+}
+
 function on(s)
 {
 	return 'on' + s[0].toUpperCase() + s.slice(1);
 }
 
-function px(n)
+class def
 {
-	return n + 'px';
+	static from = {
+		Object: {
+			keys:0,
+			values:0,
+			assign:0,
+			entries:0,
+			defineProperty:0,
+			defineProperties:0,
+		},
+		CSS: {
+			px:0,
+		}
+	}
+
+	static import(ns) {
+		for (const k in this.from[ns]) {
+			self[k] = self[ns][k];
+		}
+	}
+
+	static {
+		for (const ns in this.from) {
+			(ns in self) && this.import(ns);
+		}
+	}
 }
 
 class is
@@ -140,7 +141,7 @@ class string
 		}
 	}
 
-	static replace(str, data)
+	static populate(str, data)
 	{
 		return str.replace(/{([a-z]+)}/gi, (_, k) => data[k]);
 	}
@@ -1468,6 +1469,7 @@ class http
 				r.data = JSON.parse(r.data);
 			}
 			catch {
+
 			}
 
 			return r;
@@ -1660,8 +1662,8 @@ class Thread extends Cloneable
 			structured:		x.structured,
 			locale:			x.normalized.locale,
 			publishedAt:	time.ago(x.publishedAt),
-			channelUrl:		string.replace('https://www.youtube.com/channel/{authorId}', x),
-			permalink:		string.replace('https://www.youtube.com/watch?v={videoId}&lc={id}', x),
+			channelUrl:		string.populate('https://www.youtube.com/channel/{authorId}', x),
+			permalink:		string.populate('https://www.youtube.com/watch?v={videoId}&lc={id}', x),
 			displayText:	formatter.formatText(x.parsedText),
 			sourceName:		x.author.name,
 			sourceText:		'',
@@ -1788,6 +1790,7 @@ class YoutubeCommonApi
 	}
 
 	preconnect() {
+
 	}
 
 	async get(endpoint, params, opts)
@@ -1871,6 +1874,7 @@ class YoutubeCommonApi
 			);
 		}
 		catch {
+
 		}
 	}
 
@@ -2160,7 +2164,6 @@ class ParsedComment
 	addChild(child)
 	{
 		child.parent = this;
-
 		this.children.push(child);
 	}
 
@@ -2918,7 +2921,7 @@ class SearchModel extends WorkerPort
 	scopedSearch(response)
 	{
 		if (this.commentCount < 1) {
-			return;
+			return response.set({threads:[]});
 		}
 
 		if (!this.isCachable)
@@ -2972,7 +2975,7 @@ class SearchModel extends WorkerPort
 			const {commentCount, channelId, duration} = data;
 
 			is.null(commentCount) ?
-				this.commentCount = CC_DIS :
+				this.commentCount = CommentCount.Off :
 				this.commentCount = +commentCount;
 
 			this.context = {

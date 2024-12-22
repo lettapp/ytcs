@@ -347,17 +347,12 @@ html:not([dark]):not([fullscreen]) {
 	height:24px;
 	margin:0 2px;
 	opacity:.5;
-	transform:scale(0);
-	transition:transform 200ms;
 }
 #CSApp .CSSearchHeaderIcon:hover {
 	opacity:.8;
 }
 #CSApp .CSSearchHeaderIcon[active] {
 	opacity:.8;
-}
-#CSApp .CSSearchHeaderIcon.CSAppear {
-	transform:scale(1);
 }
 #CSApp search progress-bar {
 	top:55px;
@@ -495,6 +490,7 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp comment iframe {
 	background:#000;
+	border-radius:12px;
 	width:100%;
 	aspect-ratio:16/9;
 	margin-top:12px;
@@ -549,8 +545,8 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp replies header {
 	height:56px;
-    padding:18px;
-    margin-right:2px;
+	padding:18px;
+	margin-right:2px;
 	text-align:center;
 	font-size:15px;
 }
@@ -687,8 +683,8 @@ html:not([dark]):not([fullscreen]) {
 	letter-spacing:.1px;
 }
 #CSApp shortcut {
-    display:grid;
-    grid-template-columns:1fr 1fr;
+	display:grid;
+	grid-template-columns:1fr 1fr;
 	margin-bottom:4px;
 }
 #CSApp shortcut title {
@@ -739,16 +735,15 @@ html:not([dark]):not([fullscreen]) {
 	flex-shrink:0;
 }
 #CSApp .CSBasicView h1 {
-    height:56px;
-    padding:18px;
-    font-size:15px;
-    margin-right:2px;
+	height:56px;
+	padding:18px;
+	font-size:15px;
+	margin-right:2px;
 }
 #CSApp update {
 	display:block;
 	padding:10px 20px;
-	border-left:2px solid transparent;
-	transition:border-color 200ms;
+	border-left:3px solid transparent;
 }
 #CSApp update:hover {
 	background-color:var(--cs-hover-background);
