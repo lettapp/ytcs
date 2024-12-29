@@ -11,6 +11,31 @@ const CommentCount = {
 	Off:-1,
 }
 
+const Import = {
+	CSS: {
+		px:0,
+	},
+	Object: {
+		keys:0,
+		values:0,
+		assign:0,
+		entries:0,
+		defineProperty:0,
+		defineProperties:0,
+	}
+}
+
+for (const k in Import)
+{
+	const namespace = self[k];
+
+	if (namespace) for (const f in Import[k]) {
+		self[f] = namespace[f];
+	}
+
+	self._ = null;
+}
+
 function none()
 {
 	return null;
@@ -28,6 +53,10 @@ function unpack(pack, ...moreArgs)
 
 function match(value, ...cases)
 {
+	if (cases.length == 1) {
+		return cases[0].includes(value) && value;
+	}
+
 	for (const [k, v] of cases) {
 		if (k === value) return v;
 	}
@@ -35,47 +64,16 @@ function match(value, ...cases)
 	return value;
 }
 
-function pop(property)
+function pop(pack)
 {
-	let [key, object, value] = unpack(property, null);
+	const [key, object] = unpack(pack);
 
-	value = object[key];
-
-	return delete object[key] && value;
+	return [object[key], delete object[key]][0];
 }
 
 function on(s)
 {
 	return 'on' + s[0].toUpperCase() + s.slice(1);
-}
-
-class def
-{
-	static from = {
-		Object: {
-			keys:0,
-			values:0,
-			assign:0,
-			entries:0,
-			defineProperty:0,
-			defineProperties:0,
-		},
-		CSS: {
-			px:0,
-		}
-	}
-
-	static import(ns) {
-		for (const k in this.from[ns]) {
-			self[k] = self[ns][k];
-		}
-	}
-
-	static {
-		for (const ns in this.from) {
-			(ns in self) && this.import(ns);
-		}
-	}
 }
 
 class is
@@ -256,8 +254,8 @@ class array
 
 	static isEqual(a, b)
 	{
-		return !a.some(
-			(v, i) => v !== b[i]
+		return a.every(
+			(v, i) => b[i] === v
 		);
 	}
 
@@ -384,20 +382,6 @@ class object
 		}
 
 		return x;
-	}
-
-	static filter(o)
-	{
-		for (const k in o) {
-			null == o[k] && delete o[k];
-		}
-
-		return o;
-	}
-
-	static safeSet(target, values)
-	{
-		assign(target || {}, this.filter(values));
 	}
 }
 
@@ -545,6 +529,11 @@ class math
 		return n < min ? min : n > max ? max : n;
 	}
 
+	static wrap(n, [min, max])
+	{
+		return n < min ? max : n > max ? min : n;
+	}
+
 	static sum(d)
 	{
 		d = is.object(d) ? values(d) : d;
@@ -638,6 +627,16 @@ class sort
 	}
 }
 
+class throttle
+{
+	static reset(fn, ms = 0)
+	{
+		clearTimeout(this[fn]);
+
+		this[fn] = setTimeout(fn, ms);
+	}
+}
+
 class ext
 {
 	static file = object.map({
@@ -687,7 +686,6 @@ class notifications
 	static contextInvalidated(isUncaught)
 	{
 		this.send({contextInvalidated:isUncaught});
-
 		this.channels = {};
 	}
 
@@ -726,10 +724,8 @@ class Storage
 
 	get(k)
 	{
-		clearTimeout(this.commitId);
-
-		this.commitId = setTimeout(_ =>
-			this.persist(this.items)
+		throttle.reset(
+			_ => this.persist(this.items)
 		);
 
 		return this.items[k];
@@ -1242,8 +1238,11 @@ class UI
 			onInput:'input',
 			onKeydown:'keydown',
 			onLoad:'load',
+			onMouseleave:'mouseleave',
+			onMousemove:'mousemove',
 			onPointerdown:'pointerdown',
 			onScroll:'scroll',
+			onWheel:'wheel',
 		};
 
 		this.protos = {};
@@ -1310,6 +1309,19 @@ class UI
 	{
 		if (k in this.UIEvents) {
 			this.addEventListener(view, this.UIEvents[k]);
+		}
+	}
+
+	static Event =
+	{
+		ArrowDir({code})
+		{
+			const dir = {
+				ArrowDown:1,
+				ArrowUp:-1,
+			};
+
+			return dir[code];
 		}
 	}
 
@@ -1553,7 +1565,7 @@ class UIView extends UIResponder
 
 	get attr()
 	{
-		return this.attr_ ??= new Proxy(this.element,
+		return this.Attr ??= new Proxy(this.element,
 		{
 			get(el, k)
 			{
@@ -1755,20 +1767,21 @@ class UIScrollView extends UIView
 	{
 		UI.extend(init, {
 			native:'scroll-view',
-			import:'scrollTop scrollHeight offsetHeight',
-			attrib:'overscroll',
+			import:'scroll scrollTop scrollHeight offsetHeight',
+			attrib:'tabindex overscroll',
+			tabindex:1,
 		});
 
 		super(init);
 	}
 
-	onScroll(e)
+	focus(scrollDir)
 	{
-		this.didScroll();
-	}
+		this.element.focus();
 
-	didScroll() {
-
+		if (scrollDir) {
+			this.scroll(scrollDir);
+		}
 	}
 
 	scrollToTop()
@@ -1781,6 +1794,33 @@ class UIScrollView extends UIView
 		this.scrollTop = this.scrollHeight;
 	}
 
+	onKeydown(e)
+	{
+		const dir = UI.Event.ArrowDir(e);
+
+		if (dir || e.code == 'Space') {
+			e.preventDefault();
+		}
+
+		if (dir) {
+			this.scroll(dir);
+		}
+	}
+
+	onWheel(e)
+	{
+		this.preventScroll && e.preventDefault();
+	}
+
+	onScroll(e)
+	{
+		this.didScroll();
+	}
+
+	didScroll() {
+
+	}
+
 	setOverscroll()
 	{
 		requestAnimationFrame(_ => {
@@ -1789,12 +1829,25 @@ class UIScrollView extends UIView
 			if (this.isScrollable) {
 				this.overscroll = true;
 			}
+
+			this.preventScroll = !this.isScrollable;
+		});
+	}
+
+	scroll(dir, x = 40, tick = 5)
+	{
+		requestAnimationFrame(_ =>
+		{
+			this.scrollTop += tick * dir;
+
+			(x -= tick) > 0 &&
+				this.scroll(dir, x);
 		});
 	}
 
 	get isScrollable()
 	{
-		return this.offsetHeight < this.scrollHeight;
+		return this.scrollHeight > this.offsetHeight;
 	}
 
 	get didPassTriggerPoint()
@@ -1860,8 +1913,18 @@ class UIInput extends UIView
 
 	onKeydown(e)
 	{
-		if (e.key == 'Enter' && !e.shiftKey) {
-			this.didSubmit('Enter');
+		const {code} = e;
+
+		if (code == 'Enter' && !e.shiftKey) {
+			return this.didSubmit(code);
+		}
+
+		if (code == 'Tab') {
+			return this.dispatch({onInputTab:e});
+		}
+
+		if (code.startsWith('Arrow')) {
+			return this.dispatch({onInputArrow:e});
 		}
 	}
 
@@ -1870,7 +1933,7 @@ class UIInput extends UIView
 		this.dispatch({onInputChange:this});
 
 		if (e.inputType == 'insertFromPaste') {
-			this.didSubmit('Paste');
+			return this.didSubmit('Paste');
 		}
 
 		if (e.inputType == 'insertFromDrop') {
@@ -1880,7 +1943,7 @@ class UIInput extends UIView
 
 	onDrop(dropValue)
 	{
-		this.value = dropValue;
+		this.swapValue(dropValue);
 		this.focus();
 		this.didSubmit('Drop');
 	}
@@ -1889,6 +1952,17 @@ class UIInput extends UIView
 	{
 		this.value &&
 			this.dispatch({onInputSubmit:from});
+	}
+
+	swapValue(s, dispatch = 1)
+	{
+		[s, this.value] = [this.value, s];
+
+		if (dispatch) {
+			this.dispatch({onInputChange:this});
+		}
+
+		return s;
 	}
 
 	focus(andSelect)
@@ -1905,7 +1979,12 @@ class UIInput extends UIView
 		input.focus();
 	}
 
-	set value(s = '')
+	reset()
+	{
+		this.value = '';
+	}
+
+	set value(s)
 	{
 		this.element.value = s;
 	}
@@ -1926,7 +2005,8 @@ class UIButton extends UIView
 	constructor(init)
 	{
 		UI.extend(init, {
-			native:'button'
+			native:'button',
+			attrib:'disabled',
 		});
 
 		super(init);
@@ -2270,9 +2350,9 @@ class ViewController extends UIResponder
 		this.lastChild?.viewWillAppear(sender);
 	}
 
-	viewDidAppear(sender)
+	viewDidAppear(sender, wasVisible)
 	{
-		this.lastChild?.viewDidAppear(sender);
+		this.lastChild?.viewDidAppear(sender, wasVisible);
 	}
 
 	viewWillDisappear(sender)
@@ -2333,7 +2413,7 @@ class ViewController extends UIResponder
 			if (next) {
 				next.viewWillAppear();
 				anim.viewWillAppear(next.view).then(_ =>
-					next.viewDidAppear('NavBack')
+					next.viewDidAppear(child.constructor)
 				);
 			}
 		}
@@ -2525,12 +2605,6 @@ class AppController extends NavViewController
 		);
 	}
 
-	viewDidSet(view)
-	{
-		super.viewDidSet(view);
-		this.observeContext(view);
-	}
-
 	viewWillAppear()
 	{
 		super.viewWillAppear();
@@ -2544,7 +2618,7 @@ class AppController extends NavViewController
 		}
 
 		if (this.isVisible) {
-			return this.viewDidAppear(sender);
+			return this.viewDidAppear(sender, true);
 		}
 
 		this.viewWillAppear(sender);
@@ -2636,15 +2710,6 @@ class AppController extends NavViewController
 		}
 
 		this.view.remove();
-	}
-
-	observeContext(view)
-	{
-		const observer = new MutationObserver(_ =>
-			app.contextInvalidated && notifications.contextInvalidated()
-		);
-
-		observer.observe(view.element, {attributes:true});
 	}
 
 	getPosition()
@@ -2822,6 +2887,11 @@ class UIAppView extends UIView
 	onManipulationEnd()
 	{
 		this.isVisible && this.delegate.didPosition(this.rect);
+	}
+
+	onWheel(e)
+	{
+		e.preventDefault();
 	}
 }
 
@@ -3050,6 +3120,7 @@ class SearchController extends NavViewController
 	{
 		const view = {
 			'/commands':CommandsView,
+			'/features':FeaturesView,
 		}[k];
 
 		if (!view) {
@@ -3207,16 +3278,29 @@ class SearchView extends ViewController
 		this.delegate = delegate;
 		this.isAuthed = isAuthed;
 
+		this.navigate = [{
+			id:'/commands',
+			header:'Commands',
+			detail:'Change keyboard shortcuts'
+		}];
+
 		notifications.addListener(this, 'command');
 	}
 
-	viewDidAppear(sender)
+	viewDidAppear(sender, wasVisible)
 	{
-		if (sender == 'tsSearch') {
+		const isTsSearch = (sender == 'tsSearch');
+
+		if (isTsSearch) {
 			this.searchCurrentTime();
 		}
 
-		this.view.focusInput();
+		if (sender == RepliesView) {
+			this.view.resultsView.focus();
+		}
+		else {
+			this.view.focusInput(wasVisible && !isTsSearch);
+		}
 	}
 
 	viewDidDisappear()
@@ -3231,17 +3315,28 @@ class SearchView extends ViewController
 		);
 	}
 
+	onSuggest(q)
+	{
+		if (q[0] != '/') {
+			return [];
+		}
+
+		return this.navigate.filter(
+			item => item.id.startsWith(q)
+		);
+	}
+
 	onSearchRequest(value)
 	{
 		return this.delegate.onSearchRequest(value);
 	}
 
-	onCommentCountClicked()
+	onCommentCountClick()
 	{
 		this.present(new FeaturesView);
 	}
 
-	onBellIconClicked()
+	onBellIconClick()
 	{
 		this.present(new UpdatesView);
 	}
@@ -3296,10 +3391,9 @@ class UISearchView extends UIView
 
 		this.commentCount = new UICommentCount({
 			styles:'CSCommentCount',
-			attrib:'disabled',
-			superview:[this, 'header'],
 			disabled:true,
-			onClick:{onCommentCountClicked:this}
+			superview:[this, 'header'],
+			onClick:{onCommentCountClick:this}
 		});
 
 		this.progressBar = new UIProgressBar({
@@ -3311,6 +3405,10 @@ class UISearchView extends UIView
 				this.resultsView = new UISearchResults,
 				this.messageView = new UISearchMessage,
 			],
+			superview:[this]
+		});
+
+		this.suggestView = new UISuggestView({
 			superview:[this]
 		});
 
@@ -3326,6 +3424,10 @@ class UISearchView extends UIView
 
 	onInputSubmit(from, {rawValue})
 	{
+		if (from == 'Enter' && (_ = this.suggestView.selectedItem)) {
+			return this.onSuggestionSelect(_);
+		}
+
 		if (from == 'Paste' && this.inFindMode) {
 			return;
 		}
@@ -3341,7 +3443,42 @@ class UISearchView extends UIView
 			this.isGlobalMode(value) && 'global'
 		);
 
+		this.suggestView.render(
+			this.delegate.onSuggest(value)
+		);
+
 		this.dispatch({onInputChange:value});
+	}
+
+	onInputArrow(e)
+	{
+		const dir = UI.Event.ArrowDir(e);
+
+		if (dir && this.isSuggesting) {
+			return e.preventDefault() & this.suggestView.onArrow(dir);
+		}
+
+		if (dir == 1 && this.isResults) {
+			return this.resultsView.focus(dir);
+		}
+	}
+
+	onInputTab(e)
+	{
+		if (this.isSuggesting) {
+			return e.preventDefault() & this.suggestView.onTab();
+		}
+
+		if (this.isResults) {
+			return e.preventDefault() & this.resultsView.focus(0);
+		}
+	}
+
+	onSuggestionSelect({id})
+	{
+		this.onAutoSubmit(id);
+		this.suggestView.reset();
+		this.searchInput.reset();
 	}
 
 	onSubmit(value)
@@ -3354,7 +3491,7 @@ class UISearchView extends UIView
 		}
 	}
 
-	onEyeIconClicked()
+	onEyeIconClick()
 	{
 		this.toggleHighlighting();
 	}
@@ -3399,6 +3536,10 @@ class UISearchView extends UIView
 	{
 		if (this.inFindMode) {
 			return this.toggleHighlighting(true) | 1;
+		}
+
+		if (this.isSuggesting) {
+			return this.suggestView.reset() | 1;
 		}
 	}
 
@@ -3473,6 +3614,16 @@ class UISearchView extends UIView
 	{
 		return this.searchIcons.get({Eye:false})?.active;
 	}
+
+	get isSuggesting()
+	{
+		return this.suggestView.isVisible;
+	}
+
+	get isResults()
+	{
+		return this.resultsView.isVisible;
+	}
 }
 
 class UISearchIcons extends UIView
@@ -3521,7 +3672,7 @@ class UISearchIcons extends UIView
 			styles:'CSSearchHeaderIcon',
 			image:`UIIcon${id}`,
 			superview:[this],
-			onClick:{[`on${id}IconClicked`]:this},
+			onClick:{[`on${id}IconClick`]:this},
 		};
 
 		return (id == 'Eye')
@@ -3599,18 +3750,20 @@ class UISearchResults extends UITableView
 		this.pushInitialBatch();
 	}
 
-	onEmbedVideo({videoId, startAt}, sender)
+	embedVideo(sender, {videoId, startAt})
 	{
 		const player = this.inlinePlayer ||= new UIEmbeddedPlayer;
 
-		sender.addSubview(
-			player.load(videoId, startAt)
-		);
+		if (_ = player.superview != sender) {
+			sender.addSubview(player);
+		}
+
+		player.load(videoId, startAt, _);
 	}
 
-	setVideoTime(sender)
+	setVideoTime(sender, data)
 	{
-		YT.playerSetCurrentTime(sender.startAt);
+		YT.playerSetCurrentTime(data.startAt);
 	}
 
 	pauseInlinePlayer()
@@ -3648,9 +3801,8 @@ class UISearchResults extends UITableView
 			{
 				const view = new UIComment(struct);
 
-				if (struct.replyCount > thread.length - 1) {
+				math.inRange(struct.replyCount, [thread.length, 100]) &&
 					view.renderReplyCount();
-				}
 
 				threadView.addSubview(view);
 			}
@@ -3663,9 +3815,9 @@ class UISearchResults extends UITableView
 	{
 		thread.forEach((item, i, prev) =>
 		{
-			item.trim = item.isReply && !item.isUploader;
+			item.trim = !item.isUploader;
 
-			if (item.hidden || !item.parentId) {
+			if (!item.parentId) {
 				return;
 			}
 
@@ -3742,6 +3894,120 @@ class UISearchMessage extends UIMessageView
 	}
 }
 
+class UISuggestView extends UIView
+{
+	render(items)
+	{
+		this.clear();
+
+		for (const item of items)
+		{
+			const view = new UIView({
+				source:'UISuggestItem',
+				attrib:'selected',
+				onClick:{didSubmit:this},
+				onMousemove:{onItemHover:this},
+				...item
+			});
+
+			this.addSubview(view);
+		}
+
+		if (items.length) {
+			this.selectFirstItem();
+		}
+	}
+
+	reset()
+	{
+		this.selected = void this.clear();
+	}
+
+	onArrow(dir)
+	{
+		this.selectNextItem(dir);
+	}
+
+	onTab()
+	{
+		this.selectNextItem(1);
+
+		if (this.itemCount == 1) {
+			this.didSubmit();
+		}
+	}
+
+	onItemHover(sender)
+	{
+		this.selected = sender;
+	}
+
+	onMouseleave(e)
+	{
+		this.selected = null;
+	}
+
+	get itemCount()
+	{
+		return this.subviews.length;
+	}
+
+	get isVisible()
+	{
+		return this.itemCount > 0;
+	}
+
+	selectFirstItem()
+	{
+		this.selected = this.itemAt(0);
+	}
+
+	selectNextItem(tick)
+	{
+		this.selected = this.itemAt(
+			this.subviews.indexOf(this.selected) + tick
+		);
+	}
+
+	itemAt(i)
+	{
+		return this.subviews[
+			math.wrap(i, [0, this.itemCount - 1])
+		];
+	}
+
+	didSubmit()
+	{
+		this.dispatch({
+			onSuggestionSelect:this.selected
+		});
+	}
+
+	set selected(view)
+	{
+		const curr = this.selectedItem;
+
+		if (curr == view) {
+			return;
+		}
+
+		if (curr) {
+			curr.selected = false;
+		}
+
+		if (!view) {
+			return this.selectedItem = null;
+		}
+
+		(this.selectedItem = view).selected = true;
+	}
+
+	get selected()
+	{
+		return this.selectedItem;
+	}
+}
+
 class UIComment extends UIView
 {
 	constructor(init)
@@ -3759,11 +4025,6 @@ class UIComment extends UIView
 		this.renderTextView(init);
 
 		super.didInit(init);
-	}
-
-	embedVideo(data)
-	{
-		this.dispatch({onEmbedVideo:data});
 	}
 
 	untrim(textView)
@@ -3794,9 +4055,7 @@ class UIComment extends UIView
 			onClick:{untrim:this},
 		});
 
-		const items = structured.reduce((map, item) =>
-			(map[item.id] = item) && map, {}
-		);
+		const items = object.from(structured, 'id');
 
 		string.tokenSplit(displayText, keys(items)).forEach(s =>
 		{
@@ -3825,11 +4084,11 @@ class UIComment extends UIView
 	createAnchor(x)
 	{
 		if (x.type == 'TimeTag') {
-			x.target = [this, 'onClick:setVideoTime'];
+			x.onClick = {setVideoTime:this};
 		}
 
 		if (x.type == 'EmbedLink') {
-			x.target = [this, 'onClick:embedVideo'];
+			x.onClick = {embedVideo:this};
 		}
 
 		return new UIAnchor(x);
@@ -3846,51 +4105,93 @@ class UIEmbeddedPlayer extends UIView
 			attrib:'src allowfullscreen',
 			allowfullscreen:true
 		});
-
-		this.player = document.createElement('video');
 	}
 
 	onLoad()
 	{
 		const doc = this.contentDocument;
 
-		object.safeSet(this, {
-			player:doc.querySelector('video')
-		});
-
-		object.safeSet(
-			doc.querySelector('.ytp-pause-overlay-container'), {hidden:true}
+		doc.addEventListener('focusin',
+			_ => window.focus()
 		);
+
+		this.player = doc.querySelector('video');
 	}
 
-	load(videoId, startAt)
+	load(videoId, startAt, didMove)
 	{
-		if (videoId != this.videoId)
-		{
-			const p = {
-				start:startAt,
-				autoplay:1,
-				modestbranding:1,
-				iv_load_policy:3,
-			};
+		const newVid = this.videoId != videoId;
 
+		if (newVid || didMove) {
+			this.catchReadyState(20);
+		}
+
+		if (newVid) {
 			this.src = string.format(
-				'https://www.youtube.com/embed/%s?%s', [videoId, new URLSearchParams(p)]
+				'https://www.youtube.com/embed/%s?autoplay=1&start=%s', [videoId, startAt]
 			);
 
 			this.videoId = videoId;
 		}
 		else {
-			this.player.currentTime = startAt;
-			this.player.play();
+			this.play(startAt);
+		}
+	}
+
+	play(startAt)
+	{
+		const player = this.player;
+
+		if (!player) {
+			return;
 		}
 
-		return this;
+		if (startAt >= 0) {
+			player.currentTime = startAt
+		}
+
+		return player.play();
 	}
 
 	pause()
 	{
-		this.player.pause();
+		this.player?.pause();
+	}
+
+	catchReadyState(tries)
+	{
+		setTimeout(_ => {
+			const doc = this.contentDocument;
+
+			if (doc?.body && doc.location.host) {
+				return this.declutter(doc);
+			}
+
+			if (tries--) {
+				this.catchReadyState(tries);
+			}
+		}, 50);
+	}
+
+	declutter(doc)
+	{
+		const s = document.createElement('style');
+
+		s.textContent = `
+			[class^=ytp-tooltip],
+			.ytp-chrome-top,
+			.ytp-contextmenu,
+			.ytp-gradient-top,
+			.ytp-pause-overlay,
+			.ytp-player-content,
+			.ytp-impression-link,
+			.ytp-subtitles-button,
+			.ytp-fullscreen-button {
+				display:none !important;
+			}
+		`;
+
+		doc.documentElement.appendChild(s);
 	}
 }
 
@@ -3954,6 +4255,7 @@ class UIRepliesView extends UIView
 	{
 		this.repliesView.setDataSource(replies);
 		this.contentView.segue(this.repliesView);
+		this.repliesView.focus();
 	}
 
 	onError(id)
@@ -4006,7 +4308,7 @@ class UpdatesView extends ViewController
 		);
 	}
 
-	onItemClicked({type})
+	onItemClick({type})
 	{
 		if (type == 'changelog') {
 			return this.present(new ChangelogView);
@@ -4053,7 +4355,7 @@ class UIUpdate extends UIView
 	onClick(e)
 	{
 		this.new = false;
-		this.dispatch({onItemClicked:this});
+		this.dispatch({onItemClick:this});
 	}
 }
 
@@ -4101,9 +4403,9 @@ class CommandsView extends ViewController
 
 		for (const {data} of this.items)
 		{
-			let cflct = keys.length && (data.id != id) && array.isEqual(data.keys, keys);
+			const release = (data.id != id) && array.isEqual(data.keys, keys);
 
-			if (cflct) {
+			if (release) {
 				data.keys = [];
 			}
 
@@ -4275,6 +4577,12 @@ class UIDocument
 		events.addListener({fullscreenchange:document}, _ =>
 			this.setFullscreenState()
 		);
+
+		this.setBoolAttribute('cs-app-context', true);
+
+		new MutationObserver(this.onMutation).observe(this._, {
+			attributes:true, childList:true
+		});
 	}
 
 	removePreviousAppView({element})
@@ -4282,7 +4590,7 @@ class UIDocument
 		const prev = this._.querySelector(element.nodeName);
 
 		if (prev) {
-			prev.setAttribute('reloaded', true) & prev.remove();
+			prev.setAttribute('reloaded', true);
 		}
 	}
 
@@ -4332,6 +4640,24 @@ class UIDocument
 		}
 		else {
 			this._.removeAttribute(k);
+		}
+	}
+
+	onMutation(items, observer)
+	{
+		const reload = app.contextInvalidated;
+
+		if (reload) {
+			notifications.contextInvalidated() & observer.disconnect();
+		}
+
+		for (const {addedNodes:[el]} of items)
+		{
+			const _el = appController.view.element;
+
+			if (el?.nodeName == _el.nodeName && el != _el && !reload) {
+				el.setAttribute('reloaded', true);
+			}
 		}
 	}
 }
@@ -4412,15 +4738,18 @@ class YT
 		return string.grep(/\b(?:live|shorts|embed|v)[\/=]([\w-]{11})\b/, location.href);
 	}
 
-	static get player()
+	static playerSetCurrentTime(n, player = this.player)
 	{
-		return document.querySelector('video[src]') || document.createElement('video');
+		player.currentTime = n;
+
+		player.paused &&
+			player.play();
 	}
 
-	static playerSetCurrentTime(time)
+	static get player()
 	{
-		this.player.currentTime = time;
-		this.player.play();
+		return document.querySelector('video[src]')
+			|| document.createElement('video');
 	}
 }
 

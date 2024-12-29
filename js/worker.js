@@ -11,6 +11,31 @@ const CommentCount = {
 	Off:-1,
 }
 
+const Import = {
+	CSS: {
+		px:0,
+	},
+	Object: {
+		keys:0,
+		values:0,
+		assign:0,
+		entries:0,
+		defineProperty:0,
+		defineProperties:0,
+	}
+}
+
+for (const k in Import)
+{
+	const namespace = self[k];
+
+	if (namespace) for (const f in Import[k]) {
+		self[f] = namespace[f];
+	}
+
+	self._ = null;
+}
+
 function none()
 {
 	return null;
@@ -28,6 +53,10 @@ function unpack(pack, ...moreArgs)
 
 function match(value, ...cases)
 {
+	if (cases.length == 1) {
+		return cases[0].includes(value) && value;
+	}
+
 	for (const [k, v] of cases) {
 		if (k === value) return v;
 	}
@@ -35,47 +64,16 @@ function match(value, ...cases)
 	return value;
 }
 
-function pop(property)
+function pop(pack)
 {
-	let [key, object, value] = unpack(property, null);
+	const [key, object] = unpack(pack);
 
-	value = object[key];
-
-	return delete object[key] && value;
+	return [object[key], delete object[key]][0];
 }
 
 function on(s)
 {
 	return 'on' + s[0].toUpperCase() + s.slice(1);
-}
-
-class def
-{
-	static from = {
-		Object: {
-			keys:0,
-			values:0,
-			assign:0,
-			entries:0,
-			defineProperty:0,
-			defineProperties:0,
-		},
-		CSS: {
-			px:0,
-		}
-	}
-
-	static import(ns) {
-		for (const k in this.from[ns]) {
-			self[k] = self[ns][k];
-		}
-	}
-
-	static {
-		for (const ns in this.from) {
-			(ns in self) && this.import(ns);
-		}
-	}
 }
 
 class is
@@ -256,8 +254,8 @@ class array
 
 	static isEqual(a, b)
 	{
-		return !a.some(
-			(v, i) => v !== b[i]
+		return a.every(
+			(v, i) => b[i] === v
 		);
 	}
 
@@ -384,20 +382,6 @@ class object
 		}
 
 		return x;
-	}
-
-	static filter(o)
-	{
-		for (const k in o) {
-			null == o[k] && delete o[k];
-		}
-
-		return o;
-	}
-
-	static safeSet(target, values)
-	{
-		assign(target || {}, this.filter(values));
 	}
 }
 
@@ -545,6 +529,11 @@ class math
 		return n < min ? min : n > max ? max : n;
 	}
 
+	static wrap(n, [min, max])
+	{
+		return n < min ? max : n > max ? min : n;
+	}
+
 	static sum(d)
 	{
 		d = is.object(d) ? values(d) : d;
@@ -638,6 +627,16 @@ class sort
 	}
 }
 
+class throttle
+{
+	static reset(fn, ms = 0)
+	{
+		clearTimeout(this[fn]);
+
+		this[fn] = setTimeout(fn, ms);
+	}
+}
+
 class ext
 {
 	static file = object.map({
@@ -687,7 +686,6 @@ class notifications
 	static contextInvalidated(isUncaught)
 	{
 		this.send({contextInvalidated:isUncaught});
-
 		this.channels = {};
 	}
 
@@ -709,10 +707,8 @@ class Storage
 
 	get(k)
 	{
-		clearTimeout(this.commitId);
-
-		this.commitId = setTimeout(_ =>
-			this.persist(this.items)
+		throttle.reset(
+			_ => this.persist(this.items)
 		);
 
 		return this.items[k];
@@ -1183,7 +1179,7 @@ class ParsedString
 {
 	constructor(str)
 	{
-		this.string			= '';
+		this.value			= '';
 		this.sample			= '';
 		this.nonAlphanum	= [];
 		this.hasUnicode		= false;
@@ -1191,11 +1187,6 @@ class ParsedString
 		this.normalize(str);
 		this.parse();
 		this.parseUnicode();
-	}
-
-	get output()
-	{
-		return this.string;
 	}
 
 	get isUpperCase()
@@ -1210,19 +1201,24 @@ class ParsedString
 		);
 	}
 
+	count(re)
+	{
+		return string.count(re, this.value);
+	}
+
 	replace(find, callback)
 	{
-		this.string = this.string.replace(find, callback);
+		this.value = this.value.replace(find, callback);
 	}
 
 	toLowerCase()
 	{
-		this.string = this.string.toLowerCase();
+		this.value = this.value.toLowerCase();
 	}
 
 	normalize(str)
 	{
-		this.string = string.removeWS(str, string.PRE_NEWLINE);
+		this.value = string.removeWS(str, string.PRE_NEWLINE);
 
 		this.replaceMulti([
 			['`´‘’׳', '\''],
@@ -1248,7 +1244,7 @@ class ParsedString
 
 	parse()
 	{
-		const chars = array.unique([...this.string]).join('');
+		const chars = array.unique([...this.value]).join('');
 
 		this.sample = chars.slice(0, 16);
 
@@ -1286,9 +1282,14 @@ class ParsedString
 		);
 	}
 
-	toString()
+	[Symbol.toPrimitive]()
 	{
-		return this.string;
+		return this.value;
+	}
+
+	[Symbol.match](re)
+	{
+		return this.value.match(re);
 	}
 }
 
@@ -1357,9 +1358,12 @@ class formatter
 			s => this.emoticon[s.toLowerCase().slice(0, 2)]
 		);
 
-		s.replace(/\n/g,
-			(_, i, s) => string.isLetter(s[--i]) ? '. ' : ' '
-		);
+		if (s.hasChars('\n') && s.count(/\n\d{4,}/g, s) < 3)
+		{
+			s.replace(/\n/g,
+				(_, i, s) => string.isLetter(s[--i]) ? '. ' : ' '
+			);
+		}
 
 		if (s.hasChars('(,!?.)')) {
 			s.replace(/[?!]{2,}/, '?!');
@@ -1374,7 +1378,7 @@ class formatter
 		s.hasChars('&') && s.replace(/ & /g, ' and ');
 		s.hasChars('"') && s.replace(/\"\. ([a-z])/i, '" - $1');
 
-		return s.output;
+		return String(s);
 	}
 
 	static emoticon = {
@@ -1390,20 +1394,6 @@ class formatter
 		':(':'\u{1F641}',
 		':|':'\u{1F610}',
 		':/':'\u{1F615}',
-	}
-}
-
-class helper
-{
-	static getWatchDetails(url)
-	{
-		const videoId = string.grep(/youtu[be.com]{3,6}.*?[\/=]([\w-]{11})\b/, url);
-
-		const startAt = time.hms2int(
-			string.grep(/[?&](?:time_continue|t|start)=([\dms]+)/, url)
-		);
-
-		return {videoId, startAt};
 	}
 }
 
@@ -1589,7 +1579,7 @@ class Thread extends Cloneable
 			parent.lastChild, child, this.comments
 		);
 
-		parent.addChild(child);
+		(child.parent = parent).children.push(child);
 	}
 
 	hide(cond)
@@ -1806,7 +1796,7 @@ class YoutubeCommonApi
 
 	async commentThreads(params)
 	{
-		const fetch = await this.get('/commentThreads', params);
+		const fetch = await this.get('/commentThreads', params, {doCache:600});
 
 		if (fetch.ok) {
 			fetch.data = this.parseThreads(fetch.data);
@@ -2083,9 +2073,9 @@ class ParsedComment
 		this.toAuthor		= null;
 		this.hidden			= false;
 
-		this.parseLinks();
+		this.parseLinks(ctx.videoId);
 		this.parseHashtags();
-		this.parseTimetags(ctx.videoId, ctx.videoTime);
+		this.parseTimetags(ctx.videoId, ctx.duration);
 		this.parseText();
 	}
 
@@ -2094,9 +2084,9 @@ class ParsedComment
 		this.normalized = nlp.normalize(this.parsedText);
 	}
 
-	parseLinks()
+	parseLinks(ctxVideoId)
 	{
-		this.parsedText = this.parsedText.replace(/http[^\s]+/g, url =>
+		this.replaceText(/http[^\s]+/g, url =>
 		{
 			try {
 				url = new URL(url);
@@ -2105,11 +2095,11 @@ class ParsedComment
 				return url;
 			}
 
-			let x, {videoId, startAt} = helper.getWatchDetails(url.href);
+			let x, {videoId, startAt} = this.static.getWatchDetails(url.href);
 
 			if (videoId)
 			{
-				if (videoId == this.videoId) {
+				if (videoId == ctxVideoId) {
 					x = new TimeTag(videoId, startAt);
 				}
 				else {
@@ -2126,7 +2116,7 @@ class ParsedComment
 
 	parseHashtags()
 	{
-		this.parsedText = this.parsedText.replace(/#[\p{L}\p{N}_]{2,}/gu, tag =>
+		this.replaceText(/#[\p{L}\p{N}_]{2,}/gu, tag =>
 		{
 			return this.addStructuredItem(
 				new Hashtag(tag)
@@ -2136,7 +2126,7 @@ class ParsedComment
 
 	parseTimetags(ctxVideoId, ctxVideoTime)
 	{
-		this.parsedText = this.parsedText.replace(/\b\d\d?(:\d\d)+/g, hms =>
+		this.replaceText(/\b\d\d?(:\d\d)+/g, hms =>
 		{
 			let x, [videoId, startAt] = [this.videoId, time.hms2int(hms)];
 
@@ -2156,28 +2146,14 @@ class ParsedComment
 		});
 	}
 
+	replaceText(re, fn)
+	{
+		this.parsedText = this.parsedText.replace(re, fn);
+	}
+
 	addStructuredItem(item)
 	{
 		return this.structured.push(item) && item.id;
-	}
-
-	addChild(child)
-	{
-		child.parent = this;
-		this.children.push(child);
-	}
-
-	hide(cond)
-	{
-		if (!cond) {
-			return;
-		}
-
-		for (const child of this.children) {
-			child.hide(true);
-		}
-
-		this.hidden = true;
 	}
 
 	get lastChild()
@@ -2188,6 +2164,22 @@ class ParsedComment
 	get reactedTo()
 	{
 		return this.children.some(child => !child.hidden);
+	}
+
+	get static()
+	{
+		return this.constructor;
+	}
+
+	static getWatchDetails(url)
+	{
+		const videoId = string.grep(/youtu[be.com]{3,6}.*?[\/=]([\w-]{11})\b/, url);
+
+		const startAt = time.hms2int(
+			string.grep(/[?&](?:time_continue|t|start)=([\dms]+)/, url)
+		);
+
+		return {videoId, startAt};
 	}
 }
 
@@ -2272,7 +2264,6 @@ class Parser
 
 				users.push(user);
 				items.push(item);
-
 				i++;
 			}
 
@@ -2282,54 +2273,50 @@ class Parser
 
 			if (items.length > 2)
 			{
-				const broken = items.some(item => item.toAuthor && !users.includes(item.toAuthor));
-
-				if (broken) {
-					i--;
-				}
-				else {
-					items.forEach(
-						item => item.toAuthor = users.find(user => user != item.author)
-					);
-				}
+				items.some(item => item.toAuthor && !users.includes(item.toAuthor))
+					? i--
+					: items.forEach(item => item.toAuthor = users.find(user => user != item.author));
 			}
 		}
 
-		thread.replies.forEach((reply, i) =>
+		thread.replies.forEach((curr, i, arr) =>
 		{
-			if (reply.toAuthor)
+			let prev = arr[--i], toAuthor = curr.toAuthor, mentionText = '';
+
+			if (!prev) {
+				return;
+			}
+
+			if (!toAuthor)
 			{
-				let prev, toAuthor = reply.toAuthor, mentionText = '';
+				if (curr.author == prev.toAuthor) {
+					thread.defineChildToParent(prev, curr);
+					curr.toAuthor = prev.author;
+				}
 
-				while (prev = thread.replies[--i])
+				return;
+			}
+
+			while (prev)
+			{
+				if (toAuthor == prev.author)
 				{
-					if (prev.author == toAuthor)
+					thread.defineChildToParent(prev, curr);
+
+					if (prev.children.some(r => r.author != curr.author))
 					{
-						thread.defineChildToParent(prev, reply);
-
-						if (prev.children.some(r => r.author != reply.author))
-						{
-							mentionText = reply.addStructuredItem(
-								new ChannelLink(toAuthor.displayName, toAuthor.id)
-							);
-						}
-
-						break;
+						mentionText = curr.addStructuredItem(
+							new ChannelLink(toAuthor.displayName, toAuthor.id)
+						);
 					}
+
+					break;
 				}
 
-				reply.parsedText = reply.parsedText.replace(toAuthor.replaceRegex, mentionText + ' ');
+				prev = arr[--i];
 			}
-			else {
-				let prev = thread.replies[--i];
 
-				if (reply.author == prev?.toAuthor)
-				{
-					thread.defineChildToParent(prev, reply);
-
-					reply.toAuthor = prev.author;
-				}
-			}
+			curr.parsedText = curr.parsedText.replace(toAuthor.replaceRegex, mentionText + ' ');
 		});
 
 		return thread;
@@ -2436,8 +2423,7 @@ class Parser
 				}
 			}
 
-			if (meta.tokenCountUnique > 1 && !this.textTooLong(thread, ctx.uploaderId))
-			{
+			if (math.inRange(meta.tokenCountUnique, [1, 100])) {
 				return globals.tokenCountList.push(meta.tokenCount);
 			}
 		});
@@ -2530,14 +2516,6 @@ class Parser
 		return threads;
 	}
 
-	static textTooLong(thread, uploaderId)
-	{
-		const str = thread.topComment.parsedText;
-
-		return !thread.hasMember(uploaderId) &&
-			(str.length > 500 || string.count(/^.{0,3}\n/gm, str) > 3);
-	}
-
 	static fxProximity(subset, superset)
 	{
 		const indexes = subset.map(
@@ -2585,12 +2563,13 @@ class Index
 		this.items = object.from(threads, 'id');
 	}
 
-	query(q)
+	query({string:s, regexp:r})
 	{
-		const s = q.string;
+		if (r) {
+			return this.getItemsByRegExp(r);
+		}
 
-		switch (s)
-		{
+		switch (s) {
 			case ':':
 				return this.getAllFrames();
 
@@ -2607,21 +2586,13 @@ class Index
 				return this.getItemsWithReplies();
 		}
 
-		if (q.regexp) {
-			return this.getItemsByRegExp(q.regexp);
-		}
-
 		if (/^\d\d?:.*\d\d$/.test(s))
 		{
 			const t = this.parseTimetags(s);
 
-			switch (t.length)
-			{
-				case 1:
-					return this.getItemsByFrame(t[0]);
-
-				case 2:
-					return this.getItemsByFrameRange(t[0], t[1]);
+			switch (t.length) {
+				case 1: return this.getItemsByFrame(t[0]);
+				case 2: return this.getItemsByFrameRange(t[0], t[1]);
 			}
 		}
 
@@ -2776,7 +2747,7 @@ class Index
 		const text = thread.comments.map(comment => comment.sourceText).join(' ');
 
 		this.parseLinks(text, thread.id);
-		this.parseFrames(text, thread.id, context.videoTime);
+		this.parseFrames(text, thread.id, context.duration);
 		this.parseKeywords(text, thread.id);
 		this.parseReplies(thread, context.uploaderId);
 	}
@@ -2981,7 +2952,7 @@ class SearchModel extends WorkerPort
 			this.context = {
 				videoId:this.id,
 				uploaderId:channelId,
-				videoTime:time.pt2int(duration),
+				duration:time.pt2int(duration),
 			};
 
 			if (this.isCachable) {

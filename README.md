@@ -17,5 +17,6 @@ You can install it directly from the [Chrome Web Store][cws] or manually using t
 All extension permissions can be found in [/manifest.json][manifest]
 
 [cws]: https://chromewebstore.google.com/detail/comments-search-for-youtu/fbbhnhgdgjbfnkoiiedglmlnmleefjga "Comments Search for Youtube on Chrome Web Store"
+[ews]: https://microsoftedge.microsoft.com/addons/detail/comments-search-for-youtu/lmidmmddokbcekfgpjpngdafaimfeoel "Comments Search for Youtube on Microsoft Edge Store"
 [screenshot]: /assets/screenshot.webp "Comments Search for Youtube Screenshot"
 [manifest]: /manifest.json

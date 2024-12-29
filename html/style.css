@@ -1,5 +1,6 @@
 html {
 	--cs-background:#222;
+	--cs-border-color:#222;
 	--cs-hover-background:#272727;
 	--cs-header-background:#292929;
 	--cs-placeholder-color:rgba(255,255,255,.1);
@@ -26,10 +27,12 @@ html {
 	--cs-badge-background:#333;
 	--cs-badge-background-hover:#444;
 	--cs-detached-box-shadow:0 15px 10px -9px rgba(0, 0, 0, 0.2);
+	--cs-suggest-box-shadow:1px 6px 8px #1a1a1a;
 	--cs-image-shadow:none;
 }
 html:not([dark]):not([fullscreen]) {
 	--cs-background:#f8f8f8;
+	--cs-border-color:#ccc;
 	--cs-hover-background:#efefef;
 	--cs-header-background:#dadada;
 	--cs-placeholder-color:rgba(0,0,0,.29);
@@ -55,6 +58,7 @@ html:not([dark]):not([fullscreen]) {
 	--cs-badge-background:#ccc;
 	--cs-badge-background-hover:#bbb;
 	--cs-detached-box-shadow:0 15px 10px -9px rgba(0, 0, 0, 0.1);
+	--cs-suggest-box-shadow:1px 3px 3px #ddd;
 	--cs-image-shadow:0 0 1px 0 #000;
 }
 [hidden] {
@@ -307,33 +311,33 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp auth a {
 	display:block;
-	color:var(--cs-link-color);
 	margin:auto auto 30px;
 	font-size:small;
+	color:var(--cs-link-color);
 }
 #CSApp auth a:hover {
 	text-decoration:underline;
 }
-#CSApp search header {
+#CSApp search > header {
 	background-color:var(--cs-header-background);
 	display:flex;
 	align-items:center;
 	height:56px;
 	padding-right:46px;
 }
-#CSApp search header {
+#CSApp search > header {
 	display:flex;
 }
-#CSApp search header > * {
+#CSApp search > header > * {
 	flex-shrink:0;
 }
-#CSApp search header input {
+#CSApp search > header input {
 	flex:1;
 	height:100%;
 	padding-left:20px;
 	font-size:16px;
 }
-#CSApp search header input::placeholder {
+#CSApp search > header input::placeholder {
 	color:var(--cs-placeholder-color);
 	font-size:15px;
 }
@@ -462,12 +466,12 @@ html:not([dark]):not([fullscreen]) {
 	font-size:13px;
 }
 #CSApp [isuploader] author::after {
-	content:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='%23818181' viewBox='0 0 24 24'><path d='M12,2C6.48,2,2,6.48,2,12s4.48,10,10,10s10-4.48,10-10 S17.52,2,12,2z M9.92,17.93l-4.95-4.95l2.05-2.05l2.9,2.9l7.35-7.35l2.05,2.05L9.92,17.93z'/></svg>");
 	display:block;
 	width:13px;
 	height:13px;
 	margin-top:2px;
 	margin-left:4px;
+	content:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='%23818181' viewBox='0 0 24 24'><path d='M12,2C6.48,2,2,6.48,2,12s4.48,10,10,10s10-4.48,10-10 S17.52,2,12,2z M9.92,17.93l-4.95-4.95l2.05-2.05l2.9,2.9l7.35-7.35l2.05,2.05L9.92,17.93z'/></svg>");
 }
 #CSApp comment[isUploader] .CSCommentTime {
 	display:none;
@@ -479,9 +483,12 @@ html:not([dark]):not([fullscreen]) {
 #CSApp comment[isReply] > side {
 	width:24px;
 }
+#CSApp comment[isReply] > text {
+	-webkit-line-clamp:2;
+}
 #CSApp comment[isChained]::before {
-	background-color:var(--cs-comment-chain-color);
 	display:block;
+	background-color:var(--cs-comment-chain-color);
 	position:absolute;
 	width:2px;
 	height:100%;
@@ -495,20 +502,22 @@ html:not([dark]):not([fullscreen]) {
 	aspect-ratio:16/9;
 	margin-top:12px;
 }
-#CSApp comment text {
+#CSApp comment > text {
 	display:-webkit-box;
 	width:auto;
 	height:auto;
+	white-space:pre-line;
 	word-break:break-word;
+	-webkit-line-clamp:6;
 }
-#CSApp comment text[dir=rtl] {
+#CSApp comment > text[dir=rtl] {
 	-webkit-box-orient:vertical;
 	-webkit-box-align:end;
 }
-#CSApp comment text a {
+#CSApp comment > text a {
 	color:var(--cs-link-color);
 }
-#CSApp comment text mark {
+#CSApp comment > text mark {
 	border-bottom-width:var(--cs-text-mark-width);
 	border-bottom-color:var(--cs-text-mark-color);
 	border-bottom-style:var(--cs-text-mark-style);
@@ -543,7 +552,7 @@ html:not([dark]):not([fullscreen]) {
 	inset:0;
 	background:var(--cs-background);
 }
-#CSApp replies header {
+#CSApp replies > header {
 	height:56px;
 	padding:18px;
 	margin-right:2px;
@@ -556,7 +565,6 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp [trim] {
 	-webkit-box-orient:vertical;
-	-webkit-line-clamp:2;
 	word-break:break-word;
 }
 #CSApp [trim]:has(mark) {
@@ -664,9 +672,9 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp .CSProgressButton > ::after {
 	display:block;
-	content:attr(label);
 	position:absolute;
 	left:34px;
+	content:attr(label);
 }
 #CSApp .CSCommandsView ul {
 	margin-bottom:15px;
@@ -714,8 +722,8 @@ html:not([dark]):not([fullscreen]) {
 	filter:brightness(.95);
 }
 #CSApp shortcut error {
-	order:2;
 	display:block;
+	order:2;
 	height:20px;
 	font-size:12px;
 	color:var(--cs-error-color);
@@ -760,4 +768,27 @@ html:not([dark]):not([fullscreen]) {
 }
 #CSApp .CSChangelogView ul {
 	margin-bottom:15px;
+}
+#CSApp suggest-view:empty {
+	display:none;
+}
+#CSApp suggest-view {
+	display:block;
+	background:var(--cs-background);
+	border-top:1px solid var(--cs-border-color);
+	box-shadow:var(--cs-suggest-box-shadow);
+}
+#CSApp suggest-view > * {
+	display:block;
+	padding:11px 16px 9px;
+	border-left:3px solid transparent;
+}
+#CSApp suggest-view > *[selected] {
+	background:var(--cs-hover-background);
+	border-left-color:var(--cs-theme-color);
+}
+#CSApp suggest-view > * > detail {
+	color:var(--cs-meta-color);
+	margin-top:2px;
+	font-size:small;
 }
