@@ -510,10 +510,6 @@ html:not([dark]):not([fullscreen]) {
 	word-break:break-word;
 	-webkit-line-clamp:6;
 }
-#CSApp comment > text[dir=rtl] {
-	-webkit-box-orient:vertical;
-	-webkit-box-align:end;
-}
 #CSApp comment > text a {
 	color:var(--cs-link-color);
 }
@@ -563,11 +559,11 @@ html:not([dark]):not([fullscreen]) {
 	flex:1;
 	padding-top:20px;
 }
-#CSApp [trim] {
+#CSApp text[trim] {
 	-webkit-box-orient:vertical;
 	word-break:break-word;
 }
-#CSApp [trim]:has(mark) {
+#CSApp text[trim]:has(mark) {
 	-webkit-line-clamp:none;
 }
 #CSApp .CSContentView {
@@ -747,6 +743,7 @@ html:not([dark]):not([fullscreen]) {
 	padding:18px;
 	font-size:15px;
 	margin-right:2px;
+	text-align:center;
 }
 #CSApp update {
 	display:block;

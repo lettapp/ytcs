@@ -11,29 +11,35 @@ const CommentCount = {
 	Off:-1,
 }
 
-const Import = {
-	CSS: {
-		px:0,
-	},
-	Object: {
-		keys:0,
-		values:0,
-		assign:0,
-		entries:0,
-		defineProperty:0,
-		defineProperties:0,
-	}
-}
-
-for (const k in Import)
+void function()
 {
-	const namespace = self[k];
-
-	if (namespace) for (const f in Import[k]) {
-		self[f] = namespace[f];
+	const define = {
+		Object: {
+			keys:0,
+			values:0,
+			assign:0,
+			entries:0,
+			defineProperty:0,
+			defineProperties:0,
+		},
+		CSS: {
+			px:0,
+		}
 	}
 
-	self._ = null;
+	for (const k in define)
+	{
+		if (k in self) for (const f in define[k]) {
+			self[f] = self[k][f];
+		}
+	}
+
+	self.tmp = null;
+}()
+
+async function thenable(any)
+{
+	return any;
 }
 
 function none()
@@ -41,22 +47,18 @@ function none()
 	return null;
 }
 
+function unpack(pack)
+{
+	return entries(pack)[0];
+}
+
 function clone(array)
 {
 	return [...array];
 }
 
-function unpack(pack, ...moreArgs)
-{
-	return [...entries(pack)[0], ...moreArgs];
-}
-
 function match(value, ...cases)
 {
-	if (cases.length == 1) {
-		return cases[0].includes(value) && value;
-	}
-
 	for (const [k, v] of cases) {
 		if (k === value) return v;
 	}
@@ -64,9 +66,9 @@ function match(value, ...cases)
 	return value;
 }
 
-function pop(pack)
+function pop(property)
 {
-	const [key, object] = unpack(pack);
+	const [key, object] = unpack(property);
 
 	return [object[key], delete object[key]][0];
 }
@@ -81,6 +83,11 @@ class is
 	static null(x)
 	{
 		return x == null;
+	}
+
+	static int(x)
+	{
+		return Number.isInteger(x);
 	}
 
 	static bool(x)
@@ -111,9 +118,6 @@ class is
 
 class string
 {
-	static PRE_STRCASE = 1;
-	static PRE_NEWLINE = 1;
-
 	static split(str, d = ' ')
 	{
 		return str ? str.split(d) : [];
@@ -239,14 +243,13 @@ class string
 	{
 		return c.charCodeAt(0) > 255;
 	}
+
+	static PRE_STRCASE = 1;
+	static PRE_NEWLINE = 1;
 }
 
 class array
 {
-	static MAP_MODE_SKIP = 1;
-	static MAP_MODE_STOP = 2;
-	static MAP_MODE_FAIL = 3;
-
 	static cast(x)
 	{
 		return is.array(x) ? x : [x];
@@ -261,10 +264,10 @@ class array
 
 	static move(arr, any, to = Infinity)
 	{
-		const from = Number.isInteger(any) ? any : arr.indexOf(any);
+		const from = is.int(any) ? any : arr.indexOf(any);
 
-		this.insertAt(
-			arr, to, this.removeAt(arr, from)
+		this.insertAt(arr, to,
+			this.removeAt(arr, from)
 		);
 	}
 
@@ -358,6 +361,10 @@ class array
 
 		return items;
 	}
+
+	static MAP_MODE_SKIP = 1;
+	static MAP_MODE_STOP = 2;
+	static MAP_MODE_FAIL = 3;
 }
 
 class object
@@ -485,7 +492,7 @@ class time
 	static toUnix(s)
 	{
 		if (+s == s) {
-			return s;
+			return +s;
 		}
 
 		return new Date(s).getTime() / 1e3;
@@ -508,7 +515,7 @@ class math
 	{
 		let s = '0';
 
-		if (n !== +n || n < 1 || n > 16) {
+		if (!is.int(n) || n < 1 || n > 16) {
 			throw 'out of bound';
 		}
 
@@ -674,7 +681,7 @@ class notifications
 
 	static send(notification)
 	{
-		let [id, data, catched] = unpack(notification, 0);
+		let catched, [id, data] = unpack(notification);
 
 		for (const target of this.getChannel(id)) {
 			catched |= target[on(id)](data);
@@ -691,7 +698,7 @@ class notifications
 
 	static getChannel(id)
 	{
-		return this.channels[id] ||= new Set;
+		return this.channels[id] ||= new IterableWeakSet;
 	}
 
 	static channels = {};
@@ -711,6 +718,63 @@ class PendingPromise extends Promise
 				value:resolve
 			}
 		});
+	}
+}
+
+class IterableWeakSet extends WeakSet
+{
+	constructor()
+	{
+		super();
+
+		this.ref = new Set;
+	}
+
+	add(any)
+	{
+		if (super.has(any)) {
+			return this;
+		}
+
+		this.ref.add(
+			new WeakRef(any)
+		);
+
+		return super.add(any);
+	}
+
+	delete(any)
+	{
+		for (const ref of this.ref)
+		{
+			if (ref.deref() == any) {
+				return this.ref.delete(ref) && super.delete(any);
+			}
+		}
+
+		return false;
+	}
+
+	forEach(fn)
+	{
+		for (const any of this) {
+			fn(any);
+		}
+	}
+
+	*[Symbol.iterator]()
+	{
+		for (const ref of this.ref)
+		{
+			const any = ref.deref();
+
+			if (any) {
+				yield any;
+			}
+			else {
+				this.ref.delete(ref);
+			}
+		}
 	}
 }
 
@@ -994,7 +1058,7 @@ class Main
 {
 	constructor(waitLoad)
 	{
-		this.waitLoad = waitLoad || Promise.resolve();
+		this.waitLoad = waitLoad || thenable;
 
 		this.waitLoad.then(
 			this.onReady.bind(this)
@@ -1155,7 +1219,7 @@ class UIData
 {
 	constructor(data)
 	{
-		this.targets = [];
+		this.targets = new IterableWeakSet;
 
 		setTimeout(_ =>
 			this.didInit = true
@@ -1213,7 +1277,7 @@ class UIData
 
 	addListener(target)
 	{
-		this.targets.push(target);
+		this.targets.add(target);
 	}
 
 	isEqual(a, b)
@@ -1229,7 +1293,6 @@ class UI
 		this.html = document.createElement('div');
 
 		this.UIEvents = {
-			onBlur:'blur',
 			onClick:'click',
 			onError:'error',
 			onFocus:'focus',
@@ -1383,7 +1446,7 @@ class UIView extends UIResponder
 	init(init)
 	{
 		let skip = string.split('source native data styles import attrib target text subviews superview'),
-			attr = string.split(init.attrib || ''),
+			attr = string.split(init.attrib),
 			data = init.data || {};
 
 		for (const k of attr) {
@@ -1534,9 +1597,8 @@ class UIView extends UIResponder
 
 	removeSubview(view)
 	{
-		view.superview = null;
-
 		array.remove(view, this.subviews).remove();
+		view.superview = null;
 	}
 
 	removeFromSuperview()
@@ -1546,11 +1608,9 @@ class UIView extends UIResponder
 
 	clear()
 	{
-		let view;
-
-		while (view = this.subviews[0]) {
-			this.removeSubview(view);
-		}
+		while (
+			this.subviews[0]?.destruct()
+		);
 	}
 
 	hide(bool)
@@ -1664,11 +1724,15 @@ class UIView extends UIResponder
 	{
 		this.removeFromSuperview();
 
-		while (this.subviews[0]) {
-			this.subviews[0].destruct();
+		while (
+			this.subviews[0]?.destruct()
+		);
+
+		for (const x in this) {
+			this[x] = null;
 		}
 
-		this.targets = null;
+		return true;
 	}
 }
 
@@ -1767,7 +1831,7 @@ class UIScrollView extends UIView
 	{
 		UI.extend(init, {
 			native:'scroll-view',
-			import:'scroll scrollTop scrollHeight offsetHeight',
+			import:'scrollTop scrollHeight offsetHeight',
 			attrib:'tabindex overscroll',
 			tabindex:1,
 		});
@@ -1809,29 +1873,7 @@ class UIScrollView extends UIView
 
 	onWheel(e)
 	{
-		this.preventScroll && e.preventDefault();
-	}
-
-	onScroll(e)
-	{
-		this.didScroll();
-	}
-
-	didScroll() {
-
-	}
-
-	setOverscroll()
-	{
-		requestAnimationFrame(_ => {
-			this.overscroll = false;
-
-			if (this.isScrollable) {
-				this.overscroll = true;
-			}
-
-			this.preventScroll = !this.isScrollable;
-		});
+		!this.allowWheel && e.preventDefault();
 	}
 
 	scroll(dir, x = 40, tick = 5)
@@ -1849,45 +1891,98 @@ class UIScrollView extends UIView
 	{
 		return this.scrollHeight > this.offsetHeight;
 	}
-
-	get didPassTriggerPoint()
-	{
-		return this.scrollTop > .3 * (this.scrollHeight - this.offsetHeight);
-	}
 }
 
 class UITableView extends UIScrollView
 {
-	constructor(dataSource)
+	constructor(dataSource, itemHeight, attributeFilter = [])
 	{
 		super({});
 
 		this.dataSource = dataSource;
+		this.itemHeight = itemHeight;
+
+		this.observer = new MutationObserver(
+			this.onMutation.bind(this)
+		);
+
+		this.observer.observe(this.element, {
+			childList:true,
+			attributes:true,
+			subtree:true,
+			attributeFilter,
+		});
 	}
 
-	renderNextBatch() {
-
+	onMutation()
+	{
+		this.setOverscroll();
 	}
 
 	pushInitialBatch()
 	{
 		this.clear();
 		this.pushNextBatch();
-		this.setOverscroll();
-	}
-
-	didScroll()
-	{
-		if (this.dataSource.canNext && this.didPassTriggerPoint) {
-			this.pushNextBatch();
-		}
 	}
 
 	pushNextBatch()
 	{
-		this.addSubviews(
-			this.renderNextBatch(this.dataSource.next)
+		const batch = this.dataSource.next(
+			~~(this.offsetHeight / this.itemHeight) + 3
 		);
+
+		this.addSubviews(
+			this.renderNextBatch(batch)
+		);
+	}
+
+	addSubviews(views)
+	{
+		new IntersectionObserver(
+			this.onIntersecting.bind(this)
+		)
+		.observe(
+			views.at(-1).element
+		);
+
+		super.addSubviews(views);
+	}
+
+	onIntersecting([{isIntersecting}], observer)
+	{
+		if (!isIntersecting) {
+			return;
+		}
+
+		if (this.dataSource.canNext) {
+			this.pushNextBatch();
+		}
+
+		observer.disconnect();
+	}
+
+	setOverscroll()
+	{
+		requestAnimationFrame(_ => {
+			this.overscroll = false;
+
+			if (this.isScrollable) {
+				this.overscroll = true;
+			}
+
+			this.allowWheel = this.isScrollable;
+		});
+	}
+
+	renderNextBatch() {
+
+	}
+
+	destruct()
+	{
+		this.observer.disconnect();
+
+		super.destruct();
 	}
 }
 
@@ -2350,9 +2445,9 @@ class ViewController extends UIResponder
 		this.lastChild?.viewWillAppear(sender);
 	}
 
-	viewDidAppear(sender, wasVisible)
+	viewDidAppear(sender)
 	{
-		this.lastChild?.viewDidAppear(sender, wasVisible);
+		this.lastChild?.viewDidAppear(sender);
 	}
 
 	viewWillDisappear(sender)
@@ -2469,13 +2564,11 @@ class ViewController extends UIResponder
 
 	destruct()
 	{
-		this.view.destruct();
-
 		for (const child of this.children) {
 			child.destruct();
 		}
 
-		notifications.removeListener(this);
+		this.view.destruct();
 	}
 }
 
@@ -2556,27 +2649,25 @@ function ViewControllerLifecycleAnim(anim)
 	};
 
 	for (const k in events) {
-		anim[k] ??= then => Promise.resolve(then);
+		anim[k] ||= thenable;
 	}
 }
 
 class DataSource extends Array
 {
-	constructor(items, nextSize = 10)
+	constructor(items)
 	{
 		super(...items);
+	}
 
-		this.nextSize = nextSize;
+	next(size)
+	{
+		return this.splice(0, size);
 	}
 
 	get canNext()
 	{
 		return this.length > 0;
-	}
-
-	get next()
-	{
-		return this.splice(0, this.nextSize);
 	}
 
 	static get [Symbol.species]()
@@ -3287,7 +3378,7 @@ class SearchView extends ViewController
 		notifications.addListener(this, 'command');
 	}
 
-	viewDidAppear(sender, wasVisible)
+	viewDidAppear(sender)
 	{
 		const isTsSearch = (sender == 'tsSearch');
 
@@ -3296,10 +3387,10 @@ class SearchView extends ViewController
 		}
 
 		if (sender == RepliesView) {
-			this.view.resultsView.focus();
+			this.view.focusResults();
 		}
 		else {
-			this.view.focusInput(wasVisible && !isTsSearch);
+			this.view.focusInput(!isTsSearch);
 		}
 	}
 
@@ -3424,8 +3515,8 @@ class UISearchView extends UIView
 
 	onInputSubmit(from, {rawValue})
 	{
-		if (from == 'Enter' && (_ = this.suggestView.selectedItem)) {
-			return this.onSuggestionSelect(_);
+		if (from == 'Enter' && (tmp = this.suggestView.selectedItem)) {
+			return this.onSuggestionSelect(tmp);
 		}
 
 		if (from == 'Paste' && this.inFindMode) {
@@ -3459,7 +3550,7 @@ class UISearchView extends UIView
 		}
 
 		if (dir == 1 && this.isResults) {
-			return this.resultsView.focus(dir);
+			return e.preventDefault() & this.focusResults(dir);
 		}
 	}
 
@@ -3470,7 +3561,7 @@ class UISearchView extends UIView
 		}
 
 		if (this.isResults) {
-			return e.preventDefault() & this.resultsView.focus(0);
+			return e.preventDefault() & this.focusResults();
 		}
 	}
 
@@ -3596,6 +3687,11 @@ class UISearchView extends UIView
 	focusInput(andSelect)
 	{
 		this.searchInput.focus(andSelect);
+	}
+
+	focusResults(andScroll)
+	{
+		this.resultsView.focus(andScroll);
 	}
 
 	didDisappear()
@@ -3744,6 +3840,11 @@ class UICommentCount extends UIButton
 
 class UISearchResults extends UITableView
 {
+	constructor()
+	{
+		super(null, 78, ['trim']);
+	}
+
 	setDataSource(threads)
 	{
 		this.dataSource = new DataSource(threads);
@@ -3754,11 +3855,11 @@ class UISearchResults extends UITableView
 	{
 		const player = this.inlinePlayer ||= new UIEmbeddedPlayer;
 
-		if (_ = player.superview != sender) {
+		if (tmp = player.superview != sender) {
 			sender.addSubview(player);
 		}
 
-		player.load(videoId, startAt, _);
+		player.load(videoId, startAt, tmp);
 	}
 
 	setVideoTime(sender, data)
@@ -3898,7 +3999,7 @@ class UISuggestView extends UIView
 {
 	render(items)
 	{
-		this.clear();
+		this.reset();
 
 		for (const item of items)
 		{
@@ -3920,7 +4021,8 @@ class UISuggestView extends UIView
 
 	reset()
 	{
-		this.selected = void this.clear();
+		this.selected = null;
+		this.clear();
 	}
 
 	onArrow(dir)

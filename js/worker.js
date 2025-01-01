@@ -11,29 +11,35 @@ const CommentCount = {
 	Off:-1,
 }
 
-const Import = {
-	CSS: {
-		px:0,
-	},
-	Object: {
-		keys:0,
-		values:0,
-		assign:0,
-		entries:0,
-		defineProperty:0,
-		defineProperties:0,
-	}
-}
-
-for (const k in Import)
+void function()
 {
-	const namespace = self[k];
-
-	if (namespace) for (const f in Import[k]) {
-		self[f] = namespace[f];
+	const define = {
+		Object: {
+			keys:0,
+			values:0,
+			assign:0,
+			entries:0,
+			defineProperty:0,
+			defineProperties:0,
+		},
+		CSS: {
+			px:0,
+		}
 	}
 
-	self._ = null;
+	for (const k in define)
+	{
+		if (k in self) for (const f in define[k]) {
+			self[f] = self[k][f];
+		}
+	}
+
+	self.tmp = null;
+}()
+
+async function thenable(any)
+{
+	return any;
 }
 
 function none()
@@ -41,22 +47,18 @@ function none()
 	return null;
 }
 
+function unpack(pack)
+{
+	return entries(pack)[0];
+}
+
 function clone(array)
 {
 	return [...array];
 }
 
-function unpack(pack, ...moreArgs)
-{
-	return [...entries(pack)[0], ...moreArgs];
-}
-
 function match(value, ...cases)
 {
-	if (cases.length == 1) {
-		return cases[0].includes(value) && value;
-	}
-
 	for (const [k, v] of cases) {
 		if (k === value) return v;
 	}
@@ -64,9 +66,9 @@ function match(value, ...cases)
 	return value;
 }
 
-function pop(pack)
+function pop(property)
 {
-	const [key, object] = unpack(pack);
+	const [key, object] = unpack(property);
 
 	return [object[key], delete object[key]][0];
 }
@@ -81,6 +83,11 @@ class is
 	static null(x)
 	{
 		return x == null;
+	}
+
+	static int(x)
+	{
+		return Number.isInteger(x);
 	}
 
 	static bool(x)
@@ -111,9 +118,6 @@ class is
 
 class string
 {
-	static PRE_STRCASE = 1;
-	static PRE_NEWLINE = 1;
-
 	static split(str, d = ' ')
 	{
 		return str ? str.split(d) : [];
@@ -239,14 +243,13 @@ class string
 	{
 		return c.charCodeAt(0) > 255;
 	}
+
+	static PRE_STRCASE = 1;
+	static PRE_NEWLINE = 1;
 }
 
 class array
 {
-	static MAP_MODE_SKIP = 1;
-	static MAP_MODE_STOP = 2;
-	static MAP_MODE_FAIL = 3;
-
 	static cast(x)
 	{
 		return is.array(x) ? x : [x];
@@ -261,10 +264,10 @@ class array
 
 	static move(arr, any, to = Infinity)
 	{
-		const from = Number.isInteger(any) ? any : arr.indexOf(any);
+		const from = is.int(any) ? any : arr.indexOf(any);
 
-		this.insertAt(
-			arr, to, this.removeAt(arr, from)
+		this.insertAt(arr, to,
+			this.removeAt(arr, from)
 		);
 	}
 
@@ -358,6 +361,10 @@ class array
 
 		return items;
 	}
+
+	static MAP_MODE_SKIP = 1;
+	static MAP_MODE_STOP = 2;
+	static MAP_MODE_FAIL = 3;
 }
 
 class object
@@ -485,7 +492,7 @@ class time
 	static toUnix(s)
 	{
 		if (+s == s) {
-			return s;
+			return +s;
 		}
 
 		return new Date(s).getTime() / 1e3;
@@ -508,7 +515,7 @@ class math
 	{
 		let s = '0';
 
-		if (n !== +n || n < 1 || n > 16) {
+		if (!is.int(n) || n < 1 || n > 16) {
 			throw 'out of bound';
 		}
 
@@ -674,7 +681,7 @@ class notifications
 
 	static send(notification)
 	{
-		let [id, data, catched] = unpack(notification, 0);
+		let catched, [id, data] = unpack(notification);
 
 		for (const target of this.getChannel(id)) {
 			catched |= target[on(id)](data);
@@ -691,10 +698,67 @@ class notifications
 
 	static getChannel(id)
 	{
-		return this.channels[id] ||= new Set;
+		return this.channels[id] ||= new IterableWeakSet;
 	}
 
 	static channels = {};
+}
+
+class IterableWeakSet extends WeakSet
+{
+	constructor()
+	{
+		super();
+
+		this.ref = new Set;
+	}
+
+	add(any)
+	{
+		if (super.has(any)) {
+			return this;
+		}
+
+		this.ref.add(
+			new WeakRef(any)
+		);
+
+		return super.add(any);
+	}
+
+	delete(any)
+	{
+		for (const ref of this.ref)
+		{
+			if (ref.deref() == any) {
+				return this.ref.delete(ref) && super.delete(any);
+			}
+		}
+
+		return false;
+	}
+
+	forEach(fn)
+	{
+		for (const any of this) {
+			fn(any);
+		}
+	}
+
+	*[Symbol.iterator]()
+	{
+		for (const ref of this.ref)
+		{
+			const any = ref.deref();
+
+			if (any) {
+				yield any;
+			}
+			else {
+				this.ref.delete(ref);
+			}
+		}
+	}
 }
 
 class Storage
@@ -974,7 +1038,7 @@ class Main
 {
 	constructor(waitLoad)
 	{
-		this.waitLoad = waitLoad || Promise.resolve();
+		this.waitLoad = waitLoad || thenable;
 
 		this.waitLoad.then(
 			this.onReady.bind(this)
@@ -2423,7 +2487,7 @@ class Parser
 				}
 			}
 
-			if (math.inRange(meta.tokenCountUnique, [1, 100])) {
+			if (math.inRange(meta.tokenCountUnique, [2, 100])) {
 				return globals.tokenCountList.push(meta.tokenCount);
 			}
 		});
@@ -2884,7 +2948,10 @@ class SearchModel extends WorkerPort
 
 	globalSearch(response)
 	{
-		return api.v3.searchChannelComments(this.context.uploaderId, this.context.query.string).then(
+		const ownerId = this.context.uploaderId;
+		const searchq = this.context.query.string;
+
+		return api.v3.searchChannelComments(ownerId, searchq).then(
 			fetch => this.handleApiResponse(fetch, response)
 		);
 	}
@@ -2895,8 +2962,7 @@ class SearchModel extends WorkerPort
 			return response.set({threads:[]});
 		}
 
-		if (!this.isCachable)
-		{
+		if (!this.isCachable) {
 			const videoId = this.id;
 			const searchq = this.context.query.string;
 
