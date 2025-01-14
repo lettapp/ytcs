@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "version": "25.1.1",
+    "version": "25.1.14",
     "minimum_chrome_version": "100",
     "name": "Comments Search for Youtube",
     "description": "Search youtube comments by keywords.",

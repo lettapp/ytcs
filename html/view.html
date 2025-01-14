@@ -1,6 +1,7 @@
 <proto hidden>
 	<cs-app protoid="UIAppView" id="CSApp" hidden>
 		<link rel="stylesheet" href="{style}">
+		<progress-bar-wrap></progress-bar-wrap>
 	</cs-app>
 	<comment protoid="UIComment">
 		<side>
@@ -46,8 +47,15 @@
 	<shortcut protoid="UICommand">
 		<title>{title}</title>
 	</shortcut>
-	<updates protoid="UIUpdatesView" class="CSView CSBasicView">
-		<h1>Updates</h1>
+	<message protoid="UIContactMessage" class="CSContactMessage">
+		<content>
+			<name>LettApp</name>
+			<text>{body}</text>
+			<time>{time}</time>
+		</content>
+	</message>
+	<updates protoid="UIUpdatesView" class="CSBasicView">
+		<title>Updates</title>
 	</updates>
 	<update protoid="UIUpdate">
 		<header>{header}</header>
@@ -55,7 +63,7 @@
 	</update>
 	<auth protoid="UIAuthView" class="CSContentView CSFlexCenter">
 		<h1>Welcome!</h1>
-		<p class="CSTextSelect">Please insert your Youtube Data API key</p>
+		<p class="text-select">Please insert your Youtube Data API key</p>
 	</auth>
 	<div protoid="UIHelpView" class="CSContentView">
 		<h1>Youtube API Key</h1>

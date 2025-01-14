@@ -52,9 +52,11 @@ function unpack(pack)
 	return entries(pack)[0];
 }
 
-function clone(array)
+function bare(data = {})
 {
-	return [...array];
+	return assign(
+		Object.create(null), data
+	);
 }
 
 function match(value, ...cases)
@@ -255,13 +257,6 @@ class array
 		return is.array(x) ? x : [x];
 	}
 
-	static isEqual(a, b)
-	{
-		return a.every(
-			(v, i) => b[i] === v
-		);
-	}
-
 	static move(arr, any, to = Infinity)
 	{
 		const from = is.int(any) ? any : arr.indexOf(any);
@@ -269,6 +264,8 @@ class array
 		this.insertAt(arr, to,
 			this.removeAt(arr, from)
 		);
+
+		return any;
 	}
 
 	static remove(item, arr)
@@ -318,6 +315,13 @@ class array
 	{
 		return arrays.sort(sort.length).shift().filter(
 			item => arrays.every(arr => arr.includes(item))
+		);
+	}
+
+	static isEqual(a, b)
+	{
+		return a.every(
+			(v, i) => v === b[i]
 		);
 	}
 
@@ -371,7 +375,7 @@ class object
 {
 	static from(arrayOfObjects, k)
 	{
-		const o = {};
+		const o = bare();
 
 		for (const item of arrayOfObjects) {
 			o[item[k]] = item;
@@ -487,6 +491,20 @@ class time
 		);
 
 		return arr.join(':').replace(/^[0:]{1,4}/, '');
+	}
+
+	static fromUnix(unix)
+	{
+		const s = new Date(unix * 1e3).toLocaleString('en', {
+			year:'numeric',
+			month:'short',
+			day:'2-digit',
+			hour:'2-digit',
+			minute:'2-digit',
+			hour12:true,
+		});
+
+		return s.replace(/(\d{4}), 0?/, '$1 at ');
 	}
 
 	static toUnix(s)
@@ -613,34 +631,26 @@ class sort
 		return a - b;
 	}
 
-	static desc(a, b)
-	{
-		return b - a;
-	}
-
 	static length(a, b)
 	{
 		return a.length - b.length;
-	}
-
-	static lengthDesc(a, b)
-	{
-		return b.length - a.length;
-	}
-
-	static alphabet(a, b)
-	{
-		return a.localeCompare(b);
 	}
 }
 
 class throttle
 {
-	static reset(fn, ms = 0)
+	static reset(fn, delay = 0)
 	{
 		clearTimeout(this[fn]);
 
-		this[fn] = setTimeout(fn, ms);
+		this[fn] = setTimeout(fn, delay);
+	}
+
+	static retry(fn, [delay, i])
+	{
+		setTimeout(_ =>
+			!fn() && i-- && this.retry(fn, [delay, i]), delay
+		);
 	}
 }
 
@@ -651,6 +661,7 @@ class ext
 		css:'/html/style.css',
 		svg: {
 			auth:'/html/svg/auth.svg',
+			code:'/html/svg/code.svg',
 		}
 	}, chrome.runtime.getURL);
 }
@@ -698,67 +709,10 @@ class notifications
 
 	static getChannel(id)
 	{
-		return this.channels[id] ||= new IterableWeakSet;
+		return this.channels[id] ||= new Set;
 	}
 
 	static channels = {};
-}
-
-class IterableWeakSet extends WeakSet
-{
-	constructor()
-	{
-		super();
-
-		this.ref = new Set;
-	}
-
-	add(any)
-	{
-		if (super.has(any)) {
-			return this;
-		}
-
-		this.ref.add(
-			new WeakRef(any)
-		);
-
-		return super.add(any);
-	}
-
-	delete(any)
-	{
-		for (const ref of this.ref)
-		{
-			if (ref.deref() == any) {
-				return this.ref.delete(ref) && super.delete(any);
-			}
-		}
-
-		return false;
-	}
-
-	forEach(fn)
-	{
-		for (const any of this) {
-			fn(any);
-		}
-	}
-
-	*[Symbol.iterator]()
-	{
-		for (const ref of this.ref)
-		{
-			const any = ref.deref();
-
-			if (any) {
-				yield any;
-			}
-			else {
-				this.ref.delete(ref);
-			}
-		}
-	}
 }
 
 class Storage
@@ -1001,36 +955,40 @@ class Bucket
 	}
 }
 
-const TopComment = {
-	id:			null,
-	videoId:	null,
-	authorId:	null,
-	replyCount:	null,
-	isReply:	null,
-	sourceName:	null,
-	sourceText:	null,
-
-	from(data, isApi)
+class TopComment
+{
+	constructor()
 	{
-		const This = {...this};
+		this.id			= null;
+		this.videoId	= null;
+		this.authorId	= null;
+		this.replyCount	= null;
+		this.isReply	= null;
+		this.sourceName	= null;
+		this.sourceText	= null;
+	}
 
-		if (isApi)
+	static from(source)
+	{
+		const self = new this;
+
+		if (tmp = source.topLevelComment)
 		{
-			assign(This,
-				new YTComment(data.topLevelComment)
+			assign(self,
+				new YTComment(tmp)
 			);
 
-			This.isReply = false;
-			This.videoId = data.videoId;
-			This.replyCount = data.totalReplyCount;
+			self.isReply	= false;
+			self.videoId	= source.videoId;
+			self.replyCount	= source.totalReplyCount;
 		}
 		else {
-			for (const k in This) {
-				This[k] = data[k] ?? This[k];
+			for (const k in self) {
+				self[k] = source[k] ?? '';
 			}
 		}
 
-		return delete This.from && This;
+		return self;
 	}
 }
 
@@ -1038,13 +996,11 @@ class Main
 {
 	constructor(waitLoad)
 	{
-		this.waitLoad = waitLoad || thenable;
-
-		this.waitLoad.then(
+		waitLoad.then(
 			this.onReady.bind(this)
 		);
 
-		this.register({
+		this.register(waitLoad, {
 			onStartup: chrome.runtime.onStartup,
 			onMessage: chrome.runtime.onMessage,
 			onConnect: chrome.runtime.onConnect,
@@ -1076,11 +1032,11 @@ class Main
 		return chrome.runtime.sendMessage(message).catch(none);
 	}
 
-	register(events)
+	register(waitLoad, events)
 	{
-		const waitLoad = function(event, ...args)
+		const handler = function(event, ...args)
 		{
-			this.waitLoad.then(_ =>
+			waitLoad.then(_ =>
 				this[event](...args)
 			);
 
@@ -1089,12 +1045,9 @@ class Main
 
 		for (const event in events)
 		{
-			if (event in this)
-			{
-				events[event].addListener(
-					waitLoad.bind(this, event)
-				);
-			}
+			this[event] && events[event].addListener(
+				handler.bind(this, event)
+			);
 		}
 	}
 }
@@ -1116,11 +1069,11 @@ class Cloneable
 
 	static probe(x)
 	{
-		if (x instanceof Cloneable) {
-			return this.clone(x);
+		if (x?.constructor == Set) {
+			return structuredClone(x);
 		}
 
-		if ([Array, Object].includes(x?.constructor)) {
+		if (x instanceof Object) {
 			return this.clone(x);
 		}
 
@@ -1139,11 +1092,8 @@ class LazyMap extends Map
 
 	get(k)
 	{
-		const isNull = !this.has(k);
-
-		if (isNull) {
+		!this.has(k) &&
 			this.set(k, this.default);
-		}
 
 		return super.get(k);
 	}
@@ -1588,12 +1538,10 @@ class YTVideo
 	}
 }
 
-class YTComment extends Cloneable
+class YTComment
 {
 	constructor({id, snippet:_})
 	{
-		super();
-
 		this.id				= id;
 		this.authorId		= _.authorChannelId?.value;
 		this.authorImgUrl	= _.authorProfileImageUrl;
@@ -1607,16 +1555,15 @@ class YTComment extends Cloneable
 	}
 }
 
-class Thread extends Cloneable
+class Thread extends Array
 {
 	constructor(comments)
 	{
-		super();
+		super(...comments);
 
-		this.comments = comments;
 		this.members = new Set;
 
-		for (const comment of this.comments)
+		for (const comment of this)
 		{
 			comment.isOwner = comment.authorId == this.authorId;
 			comment.videoId = this.videoId;
@@ -1627,8 +1574,8 @@ class Thread extends Cloneable
 
 	upgrade(context)
 	{
-		this.comments = this.comments.map(
-			comment => new ParsedComment(comment, context)
+		this.forEach(
+			(item, i) => this[i] = new ParsedComment(item, context)
 		);
 	}
 
@@ -1640,20 +1587,10 @@ class Thread extends Cloneable
 	defineChildToParent(parent, child)
 	{
 		array.moveAfter(
-			parent.lastChild, child, this.comments
+			parent.lastChild, child, this
 		);
 
 		(child.parent = parent).children.push(child);
-	}
-
-	hide(cond)
-	{
-		this.topComment.hide(cond);
-	}
-
-	get length()
-	{
-		return this.comments.length;
 	}
 
 	get memberCount()
@@ -1663,7 +1600,7 @@ class Thread extends Cloneable
 
 	get replies()
 	{
-		return this.comments.slice(1);
+		return this.slice(1);
 	}
 
 	get hasReplies()
@@ -1673,37 +1610,32 @@ class Thread extends Cloneable
 
 	get topComment()
 	{
-		return this.comments[0];
+		return this[0];
 	}
 
 	get firstReply()
 	{
-		return this.comments[1];
-	}
-
-	get hidden()
-	{
-		return this.topComment.hidden;
+		return this[1];
 	}
 
 	get id()
 	{
-		return this.topComment.id;
+		return this[0].id;
 	}
 
 	get videoId()
 	{
-		return this.topComment.videoId;
+		return this[0].videoId;
 	}
 
 	get authorId()
 	{
-		return this.topComment.authorId;
+		return this[0].authorId;
 	}
 
 	toJSON()
 	{
-		return this.comments.map(x => ({
+		return this.map(x => ({
 			id:				x.id,
 			videoId:		x.videoId,
 			parentId:		x.parent?.id,
@@ -1720,8 +1652,12 @@ class Thread extends Cloneable
 			permalink:		string.populate('https://www.youtube.com/watch?v={videoId}&lc={id}', x),
 			displayText:	formatter.formatText(x.parsedText),
 			sourceName:		x.author.name,
-			sourceText:		'',
 		}));
+	}
+
+	static get [Symbol.species]()
+	{
+		return Array;
 	}
 }
 
@@ -1737,6 +1673,7 @@ class ApiManager
 		};
 
 		this.ytd.setKey(key);
+		this.lett.app.setKey(key);
 	}
 
 	get v3()
@@ -1756,18 +1693,46 @@ class AppLettApi
 		this.baseUrl = 'https://api.lett.app/ytcs';
 	}
 
-	auth(key)
+	setKey(apiKey, validate = false)
 	{
-		return this.get('/auth', {key});
+		this.key = apiKey;
+
+		if (validate)
+		{
+			return this.get('/auth').then(r =>
+			{
+				if (!r.ok) {
+					delete this.key;
+				}
+
+				return r;
+			});
+		}
 	}
 
-	updates(key)
+	updates()
 	{
-		return this.get('/updates', {key});
+		return this.get('/updates');
 	}
 
-	async get(endpoint, params, opts)
+	messages(text)
 	{
+		if (text) {
+			return this.post('/messages', {text});
+		}
+
+		return this.get('/messages');
+	}
+
+	get isAuthed()
+	{
+		return !!this.key;
+	}
+
+	async get(endpoint, params = {}, opts)
+	{
+		params.key = this.key;
+
 		const fetch = await http.get(this.baseUrl + endpoint, params, opts);
 
 		if (!fetch.ok) {
@@ -1779,6 +1744,8 @@ class AppLettApi
 
 	async post(endpoint, params)
 	{
+		params.key = this.key;
+
 		const fetch = await http.post(this.baseUrl + endpoint, params);
 
 		if (!fetch.ok) {
@@ -1924,7 +1891,7 @@ class YoutubeCommonApi
 			}
 
 			return new Thread(
-				[TopComment.from(snippet, 1), ...this.parseComments(replies)]
+				[TopComment.from(snippet), ...this.parseComments(replies)]
 			);
 		}
 		catch {
@@ -2094,7 +2061,7 @@ class Users
 	constructor(threads)
 	{
 		for (const thread of threads) {
-			for (const {authorId, sourceName} of thread.comments) {
+			for (const {authorId, sourceName} of thread) {
 				this[authorId] = new Author(authorId, sourceName)
 			}
 		}
@@ -2251,7 +2218,7 @@ class Dictionary
 {
 	constructor()
 	{
-		this.map = {};
+		this.map = bare();
 	}
 
 	get(k)
@@ -2315,7 +2282,7 @@ class Parser
 
 			while (i < n)
 			{
-				const item = thread.comments[i];
+				const item = thread[i];
 				const user = item.author;
 
 				if (users.at(-1) == user) {
@@ -2564,7 +2531,7 @@ class Parser
 			}
 		});
 
-		clone(threads).forEach(thread =>
+		[...threads].forEach(thread =>
 		{
 			if (thread.hasReplies && thread.memberCount == 1)
 			{
@@ -2572,7 +2539,7 @@ class Parser
 				const t2 = new Date(thread.firstReply.publishedAt);
 
 				if (t2 - t1 < 300e3) {
-					return array.move(threads, thread);
+					array.move(threads, thread);
 				}
 			}
 		});
@@ -2614,13 +2581,11 @@ class Index
 		this.users = new Users(threads);
 		this.count = threads.length;
 
-		for (const k of string.split('keywords frames hasLinks hasReplies hasUploader'))
-		{
+		for (const k of string.split('keywords frames hasLinks hasReplies hasUploader')) {
 			this[k] = new LazyMap([]);
 		}
 
-		for (const thread of threads)
-		{
+		for (const thread of threads) {
 			this.process(thread, context);
 		}
 
@@ -2743,32 +2708,19 @@ class Index
 	getItemsByRegExp(re)
 	{
 		return this.getAllItems().filter(
-			thread => thread.comments.some(
-				comment => re.test(comment.sourceText)
+			thread => thread.some(
+				({sourceText}) => re.test(sourceText)
 			)
 		);
 	}
 
-	getItemsByKeywords(str)
+	getItemsByKeywords(q)
 	{
-		let finals = [];
-
-		let ids = this.tokenize(str).map(
+		const ids = this.tokenize(q).map(
 			k => this.keywords.get(k)
 		);
 
-		ids = ids.filter(x => x.length);
-
-		if (ids.length)
-		{
-			finals = array.intersect(...ids);
-
-			if (!finals.length) {
-				finals = ids.sort(sort.length).shift();
-			}
-		}
-
-		return this.exportItems(finals);
+		return this.exportItems(ids);
 	}
 
 	parseReplies(thread, uploaderId)
@@ -2808,7 +2760,7 @@ class Index
 
 	process(thread, context)
 	{
-		const text = thread.comments.map(comment => comment.sourceText).join(' ');
+		const text = thread.map(comment => comment.sourceText).join(' ');
 
 		this.parseLinks(text, thread.id);
 		this.parseFrames(text, thread.id, context.duration);
@@ -2937,12 +2889,16 @@ class SearchModel extends WorkerPort
 				throw error;
 			}
 
+			if (!data.length) {
+				throw 'errFiltered';
+			}
+
 			const thread = Parser.parse(data, {
 				...this.context,
 				users: new Users([data])
 			});
 
-			thread.comments.shift() & response.set({thread});
+			thread.shift() & response.set({thread});
 		});
 	}
 
@@ -3076,7 +3032,7 @@ class App extends Main
 
 	onClicked(tab)
 	{
-		this.sendMessage({activate:true}, tab.id);
+		this.sendMessage({activate:null}, tab.id);
 	}
 
 	onConnect(port)
@@ -3119,7 +3075,7 @@ class App extends Main
 
 		if (r.ok)
 		{
-			r = await api.lett.app.auth(apiKey);
+			r = await api.lett.app.setKey(apiKey, true);
 
 			if (r.ok) {
 				mem.user.id = r.data.id;
@@ -3130,10 +3086,20 @@ class App extends Main
 		callback(r.error);
 	}
 
+	onGetUserMessages(_, tab, callback)
+	{
+		api.lett.app.messages().then(callback);
+	}
+
+	onPostUserMessage(text)
+	{
+		api.lett.app.messages(text);
+	}
+
 	setAlarms()
 	{
-		chrome.alarms.create('refreshCache', {periodInMinutes:120});
-		chrome.alarms.create('updatesCheck', {periodInMinutes:360});
+		chrome.alarms.create('refreshCache', {periodInMinutes:100});
+		chrome.alarms.create('updatesCheck', {periodInMinutes:100});
 	}
 
 	onCacheRefresh()
@@ -3143,11 +3109,11 @@ class App extends Main
 
 	onUpdatesCheck()
 	{
-		if (!mem.user.key) {
+		if (!api.lett.app.isAuthed) {
 			return;
 		}
 
-		api.lett.app.updates(mem.user.key).then(
+		api.lett.app.updates().then(
 			r => this.addUpdates(r.data?.items ?? [])
 		);
 	}
@@ -3158,7 +3124,13 @@ class App extends Main
 			item => assign(item, {id:math.randint(5), new:true})
 		);
 
-		mem.updates.unshift(...items);
+		mem.updates.forEach(
+			item => item.new && items.push(item)
+		);
+
+		mem.updates = values(
+			object.from(items, 'type')
+		);
 	}
 }
 
